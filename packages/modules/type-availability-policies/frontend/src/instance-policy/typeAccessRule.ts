@@ -1,10 +1,21 @@
-import type { PolicyAction, PolicySelector } from '@n8n/api-types';
+import type { InstanceTypeAccessResponse, PolicyAction, PolicySelector } from '@n8n/api-types';
 import { generateNanoId } from '@n8n/utils/generate-nano-id';
 
 import type { InstancePolicyContent } from '../type-availability-policies.api';
 import type { RestrictedTypeKind } from '../type-availability-policies.constants';
 
 type Rule = { selector: PolicySelector };
+
+/**
+ * False when a rule leaves the type open to project opt-in. The admin page sets only Allowed and
+ * Restricted, so it cannot change such a type without removing what that rule decides.
+ */
+export function isTypeAccessEditable({
+	access,
+	matchedRuleId,
+}: InstanceTypeAccessResponse['types'][number]): boolean {
+	return !(access === 'delegate' && matchedRuleId !== null);
+}
 
 const isNameRule = (rule: Rule, name: string) =>
 	rule.selector.kind === 'name' && rule.selector.value === name;

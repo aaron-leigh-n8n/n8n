@@ -4,11 +4,16 @@ import { N8nIcon, N8nOption, N8nSelect, type IconColor, type IconName } from '@n
 import { useI18n, type BaseTextKey } from '@n8n/i18n';
 import { computed } from 'vue';
 
-const { modelValue, label } = defineProps<{
+const {
+	modelValue,
+	label,
+	disabled = false,
+} = defineProps<{
 	/** `undefined` while the access of the type is not loaded. */
 	modelValue: PolicyAction | undefined;
 	/** The name of the type, for the accessible label. */
 	label: string;
+	disabled?: boolean;
 }>();
 
 const emit = defineEmits<{ 'update:modelValue': [action: PolicyAction] }>();
@@ -41,7 +46,7 @@ function onChange(value: unknown) {
 <template>
 	<N8nSelect
 		:model-value="modelValue"
-		:disabled="modelValue === undefined"
+		:disabled="disabled || modelValue === undefined"
 		:teleported="false"
 		:aria-label="
 			i18n.baseText('typeAvailabilityPolicies.access.ariaLabel', { interpolate: { name: label } })

@@ -4,6 +4,8 @@ import { useRootStore } from '@n8n/stores/useRootStore';
 import { defineStore } from 'pinia';
 import { shallowReactive } from 'vue';
 
+import { isTypeAccessEditable } from './typeAccessRule';
+
 import {
 	fetchInstancePolicy,
 	fetchInstanceTypeAccess,
@@ -44,12 +46,20 @@ type LoadKindResult = { error: unknown; accessError: unknown };
 type PolicyByKind = { [K in RestrictedTypeKind]: InstancePolicy<K> | null };
 
 /** The access of each type, read from the server for one policy version. */
-type TypeAccessSnapshot = { version: number; byName: ReadonlyMap<string, PolicyAction> };
+type TypeAccessSnapshot = {
+	version: number;
+	byName: ReadonlyMap<string, PolicyAction>;
+	/** The types whose access the admin page cannot change. See `isTypeAccessEditable`. */
+	locked: ReadonlySet<string>;
+};
 
 function toTypeAccess(response: InstanceTypeAccessResponse): TypeAccessSnapshot {
 	return {
 		version: response.version,
 		byName: new Map(response.types.map(({ name, access }) => [name, access])),
+		locked: new Set(
+			response.types.filter((type) => !isTypeAccessEditable(type)).map(({ name }) => name),
+		),
 	};
 }
 

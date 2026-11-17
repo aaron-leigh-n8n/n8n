@@ -50,6 +50,14 @@ describe('TypeAccessSelect', () => {
 		expect(getByTestId('type-access-select')).toBeDisabled();
 	});
 
+	it('is disabled when the caller disables it', () => {
+		const { getByTestId } = renderSelect({
+			props: { modelValue: 'delegate', label: 'Notion', disabled: true },
+		});
+
+		expect(getByTestId('type-access-select')).toBeDisabled();
+	});
+
 	it('emits a new access, and nothing for the current one', async () => {
 		const { getByTestId, emitted } = renderSelect({
 			props: { modelValue: 'allow', label: 'Notion' },

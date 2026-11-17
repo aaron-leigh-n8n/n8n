@@ -82,23 +82,24 @@ export type RelatedTypes = {
 	credentialTypes: string[];
 };
 
+/** A node type that a related section can show: known, visible, and not a generated Tool variant. */
+function isRelatableNodeType(name: string, index: CredentialTypeIndex): boolean {
+	const latest = index.latestNodeTypes.get(name);
+	return (
+		latest !== undefined &&
+		!latest.hidden &&
+		getGeneratedToolVariantBase(name, (base) => index.latestNodeTypes.get(base)) === undefined
+	);
+}
+
 /**
  * The node and credential types that an admin may also want to review for `nodeType`. Relations
  * are direct only: the rules never follow a chain of related types.
  */
-export function getRelatedTypes(nodeType: string, index: CredentialTypeIndex): RelatedTypes {
-	const { nodeTypesByCredentialType, credentialTypesByNodeType, latestNodeTypes } = index;
-	const getNodeType = (name: string) => latestNodeTypes.get(name);
 
-	const isRelatable = (name: string) => {
-		const latest = latestNodeTypes.get(name);
-		return (
-			name !== nodeType &&
-			latest !== undefined &&
-			!latest.hidden &&
-			getGeneratedToolVariantBase(name, getNodeType) === undefined
-		);
-	};
+export function getRelatedTypes(nodeType: string, index: CredentialTypeIndex): RelatedTypes {
+	const { nodeTypesByCredentialType, credentialTypesByNodeType } = index;
+	const isRelatable = (name: string) => name !== nodeType && isRelatableNodeType(name, index);
 
 	const credentialTypes = [...(credentialTypesByNodeType.get(nodeType) ?? [])].filter(
 		(name) => !GENERIC_CREDENTIAL_TYPES.has(name),
@@ -123,4 +124,31 @@ export function getRelatedTypes(nodeType: string, index: CredentialTypeIndex): R
 	if (isRelatable(counterpart)) nodeTypes.add(counterpart);
 
 	return { nodeTypes: [...nodeTypes], credentialTypes };
+}
+
+/**
+ * The node types that list `credentialType`, and the other credential types of those node types.
+ * Unlike the node rules, a shared credential type relates every node type that lists it, because a
+ * rule on it applies to all of them.
+ */
+export function getCredentialRelatedTypes(
+	credentialType: string,
+	index: CredentialTypeIndex,
+): RelatedTypes {
+	if (GENERIC_CREDENTIAL_TYPES.has(credentialType)) return { nodeTypes: [], credentialTypes: [] };
+
+	const nodeTypes = [...(index.nodeTypesByCredentialType.get(credentialType) ?? [])].filter(
+		(name) => !RELATION_EXCLUDED_NODE_TYPES.has(name) && isRelatableNodeType(name, index),
+	);
+
+	const credentialTypes = new Set<string>();
+	for (const nodeType of nodeTypes) {
+		for (const other of index.credentialTypesByNodeType.get(nodeType) ?? []) {
+			if (other !== credentialType && !GENERIC_CREDENTIAL_TYPES.has(other)) {
+				credentialTypes.add(other);
+			}
+		}
+	}
+
+	return { nodeTypes, credentialTypes: [...credentialTypes] };
 }

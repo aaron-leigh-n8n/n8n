@@ -224,9 +224,7 @@ describe('NodeTypeAccessDialog', () => {
 	it('shows six items per section and the rest on request', async () => {
 		const { getByTestId, getByText } = await setup('n8n-nodes-base.many');
 		const nodes = () =>
-			within(getByTestId('node-type-access-related-node')).getAllByTestId(
-				'node-type-access-related-item',
-			);
+			within(getByTestId('node-type-access-related-node')).getAllByTestId('type-access-item');
 
 		expect(nodes()).toHaveLength(6);
 		await fireEvent.click(getByText('And 2 more…'));

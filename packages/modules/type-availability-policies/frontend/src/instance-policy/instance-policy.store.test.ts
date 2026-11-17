@@ -76,6 +76,22 @@ describe('useInstancePolicyStore', () => {
 			expect(store.typeAccess.credential).toBeNull();
 		});
 
+		it('marks the types that a rule leaves open to project opt-in as locked', async () => {
+			mocks.fetchInstanceTypeAccess.mockResolvedValue({
+				...accessResponse(3),
+				types: [
+					{ name: 'n8n-nodes-base.slack', access: 'delegate', matchedRuleId: 'rule-1' },
+					{ name: 'n8n-nodes-base.gmail', access: 'delegate', matchedRuleId: null },
+					{ name: 'n8n-nodes-base.notion', access: 'deny', matchedRuleId: 'rule-2' },
+				],
+			});
+			const store = useInstancePolicyStore();
+
+			await store.load(['node']);
+
+			expect(store.typeAccess.node?.locked).toEqual(new Set(['n8n-nodes-base.slack']));
+		});
+
 		it('reads the access again before a save resolves', async () => {
 			mocks.saveInstancePolicy.mockResolvedValue({ ...nodePolicy(4, [DENY_SLACK]), warnings: [] });
 			const store = useInstancePolicyStore();

@@ -5,6 +5,7 @@ import { useI18n } from '@n8n/i18n';
 import { useRootStore } from '@n8n/stores/useRootStore';
 import { computed, reactive, ref, shallowRef, toRaw, watch } from 'vue';
 
+import { isTypeAccessEditable } from './typeAccessRule';
 import { useInstancePolicy } from './useInstancePolicy';
 import {
 	fetchInstanceTypeAccess,
@@ -15,7 +16,7 @@ import type { RestrictedTypeKind } from '../type-availability-policies.constants
 export type InstanceTypeAccessRow = {
 	name: string;
 	access: PolicyAction;
-	/** False when a rule leaves the type open to project opt-in, which the admin page cannot set. */
+	/** See `isTypeAccessEditable`. */
 	editable: boolean;
 };
 
@@ -53,7 +54,7 @@ export function useInstanceTypeAccess<K extends RestrictedTypeKind>(
 		(response.value?.types ?? []).map((type) => ({
 			name: type.name,
 			access: pending.get(type.name)?.access ?? type.access,
-			editable: !(type.access === 'delegate' && type.matchedRuleId !== null),
+			editable: isTypeAccessEditable(type),
 		})),
 	);
 

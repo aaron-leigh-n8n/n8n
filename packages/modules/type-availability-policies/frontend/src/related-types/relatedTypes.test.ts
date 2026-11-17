@@ -2,6 +2,7 @@ import type { INodeCredentialDescription, INodeTypeDescription } from 'n8n-workf
 
 import {
 	buildCredentialTypeIndex,
+	getCredentialRelatedTypes,
 	getGeneratedToolVariantBase,
 	getRelatedTypes,
 } from './relatedTypes';
@@ -180,5 +181,93 @@ describe('getRelatedTypes', () => {
 		];
 
 		expect(relatedTo('n8n-nodes-base.a', descriptions).nodeTypes).toEqual(['n8n-nodes-base.b']);
+	});
+});
+
+describe('getCredentialRelatedTypes', () => {
+	const relatedToCredential = (name: string, descriptions: INodeTypeDescription[]) =>
+		getCredentialRelatedTypes(name, buildCredentialTypeIndex(descriptions));
+
+	// The credential lists of the Airtable node versions, as in n8n-nodes-base.
+	const AIRTABLE = [
+		nodeType('n8n-nodes-base.airtable', ['airtableApi'], { version: 1 }),
+		nodeType('n8n-nodes-base.airtable', ['airtableTokenApi', 'airtableOAuth2Api'], {
+			version: 2,
+		}),
+		nodeType('n8n-nodes-base.airtableTrigger', [
+			'airtableApi',
+			'airtableTokenApi',
+			'airtableOAuth2Api',
+		]),
+	];
+
+	it('lists the node types that use the credential type and their other credential types', () => {
+		expect(relatedToCredential('airtableApi', AIRTABLE)).toEqual({
+			nodeTypes: ['n8n-nodes-base.airtable', 'n8n-nodes-base.airtableTrigger'],
+			credentialTypes: ['airtableTokenApi', 'airtableOAuth2Api'],
+		});
+	});
+
+	it('lists only node types when they use no other credential type', () => {
+		const descriptions = [
+			nodeType('n8n-nodes-base.activeCampaign', ['activeCampaignApi']),
+			nodeType('n8n-nodes-base.activeCampaignTrigger', ['activeCampaignApi']),
+		];
+
+		expect(relatedToCredential('activeCampaignApi', descriptions)).toEqual({
+			nodeTypes: ['n8n-nodes-base.activeCampaign', 'n8n-nodes-base.activeCampaignTrigger'],
+			credentialTypes: [],
+		});
+	});
+
+	it('leaves out the generic credential types of the related node types', () => {
+		const descriptions = [nodeType('n8n-nodes-base.notion', ['notionApi', 'httpHeaderAuth'])];
+
+		expect(relatedToCredential('notionApi', descriptions).credentialTypes).toEqual([]);
+	});
+
+	it('relates nothing to a generic credential type', () => {
+		const descriptions = [
+			nodeType('n8n-nodes-base.httpRequest', ['httpHeaderAuth']),
+			nodeType('n8n-nodes-base.notion', ['notionApi', 'httpHeaderAuth']),
+		];
+
+		expect(relatedToCredential('httpHeaderAuth', descriptions)).toEqual({
+			nodeTypes: [],
+			credentialTypes: [],
+		});
+	});
+
+	it('relates every node type that lists a shared credential type', () => {
+		const descriptions = [
+			nodeType('n8n-nodes-base.gmail', ['googleApi', 'gmailOAuth2']),
+			nodeType('n8n-nodes-base.googleDrive', ['googleApi', 'googleDriveOAuth2Api']),
+		];
+
+		expect(relatedToCredential('googleApi', descriptions)).toEqual({
+			nodeTypes: ['n8n-nodes-base.gmail', 'n8n-nodes-base.googleDrive'],
+			credentialTypes: ['gmailOAuth2', 'googleDriveOAuth2Api'],
+		});
+	});
+
+	it('leaves out the excluded, hidden and generated tool node types and their credential types', () => {
+		const descriptions = [
+			nodeType('n8n-nodes-base.gmail', ['gmailOAuth2'], { usableAsTool: true }),
+			nodeType('n8n-nodes-base.gmailTool', ['gmailOAuth2', 'toolOnlyApi']),
+			nodeType('n8n-nodes-base.gmailLegacy', ['gmailOAuth2', 'legacyApi'], { hidden: true }),
+			nodeType('n8n-nodes-base.evaluation', ['gmailOAuth2', 'googleApi']),
+		];
+
+		expect(relatedToCredential('gmailOAuth2', descriptions)).toEqual({
+			nodeTypes: ['n8n-nodes-base.gmail'],
+			credentialTypes: [],
+		});
+	});
+
+	it('relates nothing to a credential type that no node type lists', () => {
+		expect(relatedToCredential('virusTotalApi', AIRTABLE)).toEqual({
+			nodeTypes: [],
+			credentialTypes: [],
+		});
 	});
 });
