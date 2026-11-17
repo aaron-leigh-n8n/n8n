@@ -10,18 +10,18 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import InstancePolicyView from './InstancePolicyView.vue';
 import { POLICIES_LANDING_VIEW } from '../type-availability-policies.constants';
 
-const { route, push, replace, fetchInstancePolicy, fetchInstanceAccess } = vi.hoisted(() => ({
+const { route, push, replace, fetchInstancePolicy, fetchInstanceTypeAccess } = vi.hoisted(() => ({
 	route: { query: {} as Record<string, string> },
 	push: vi.fn(),
 	replace: vi.fn(),
 	fetchInstancePolicy: vi.fn(),
-	fetchInstanceAccess: vi.fn(),
+	fetchInstanceTypeAccess: vi.fn(),
 }));
 
 vi.mock('../type-availability-policies.api', () => ({
 	fetchInstancePolicy,
 	saveInstancePolicy: vi.fn(),
-	fetchInstanceAccess,
+	fetchInstanceTypeAccess,
 	fetchCredentialTypeSummaries: vi.fn(
 		async () => new Map([['bitlyApi', { displayName: 'Bitly API' }]]),
 	),
@@ -32,7 +32,16 @@ vi.mock('vue-router', () => ({
 	useRouter: () => ({ push, replace }),
 }));
 
-const renderView = createComponentRenderer(InstancePolicyView);
+const nodeTypeAccessDialogStub = {
+	props: ['open', 'nodeType'],
+	emits: ['update:open'],
+	template:
+		'<button data-test-id="node-type-access-dialog" :data-node-type="nodeType" @click="$emit(\'update:open\', false)" />',
+};
+
+const renderView = createComponentRenderer(InstancePolicyView, {
+	global: { stubs: { NodeTypeAccessDialog: nodeTypeAccessDialogStub } },
+});
 
 const BOTH_SCOPES: Scope[] = ['nodeTypePolicy:manage', 'credentialTypePolicy:manage'];
 
@@ -53,7 +62,7 @@ describe('InstancePolicyView', () => {
 			defaultAction: 'allow',
 			version: 0,
 		});
-		fetchInstanceAccess.mockResolvedValue({
+		fetchInstanceTypeAccess.mockResolvedValue({
 			scopeId: null,
 			version: 0,
 			defaultAction: 'allow',
@@ -143,7 +152,7 @@ describe('InstancePolicyView', () => {
 		const { findByText } = setup(BOTH_SCOPES, { tab: 'credential' });
 
 		expect(await findByText('Bitly API')).toBeInTheDocument();
-		expect(fetchInstanceAccess).toHaveBeenCalledWith(expect.anything(), 'credential');
+		expect(fetchInstanceTypeAccess).toHaveBeenCalledWith(expect.anything(), 'credential');
 	});
 
 	it('does not load the credential types for a user with only the node scope', async () => {
@@ -151,7 +160,7 @@ describe('InstancePolicyView', () => {
 
 		await waitFor(() => expect(fetchInstancePolicy).toHaveBeenCalled());
 		expect(queryByTestId('instance-policy-table')).not.toBeInTheDocument();
-		expect(fetchInstanceAccess).not.toHaveBeenCalled();
+		expect(fetchInstanceTypeAccess).not.toHaveBeenCalledWith(expect.anything(), 'credential');
 	});
 
 	it('falls back to the first tab the user can manage when the query names another', () => {
@@ -166,5 +175,30 @@ describe('InstancePolicyView', () => {
 		await fireEvent.click(getByText('Credentials'));
 
 		expect(replace).toHaveBeenCalledWith({ query: { tab: 'credential' } });
+	});
+
+	it('opens the node dialog named in the query', () => {
+		const { getByTestId } = setup(BOTH_SCOPES, { details: 'n8n-nodes-base.notion' });
+
+		expect(getByTestId('node-type-access-dialog')).toHaveAttribute(
+			'data-node-type',
+			'n8n-nodes-base.notion',
+		);
+	});
+
+	it('does not open the node dialog for a user who cannot manage node types', () => {
+		const { queryByTestId } = setup(['credentialTypePolicy:manage'], {
+			details: 'n8n-nodes-base.notion',
+		});
+
+		expect(queryByTestId('node-type-access-dialog')).not.toBeInTheDocument();
+	});
+
+	it('removes the node from the query when the dialog closes', async () => {
+		const { getByTestId } = setup(BOTH_SCOPES, { tab: 'node', details: 'n8n-nodes-base.notion' });
+
+		await fireEvent.click(getByTestId('node-type-access-dialog'));
+
+		expect(replace).toHaveBeenCalledWith({ query: { tab: 'node' } });
 	});
 });

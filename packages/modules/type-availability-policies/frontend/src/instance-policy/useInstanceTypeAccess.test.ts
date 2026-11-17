@@ -14,7 +14,7 @@ import { useTypeAvailabilityPoliciesStore } from '../type-availability-policies.
 const mocks = vi.hoisted(() => ({
 	fetchInstancePolicy: vi.fn(),
 	saveInstancePolicy: vi.fn(),
-	fetchInstanceAccess: vi.fn(),
+	fetchInstanceTypeAccess: vi.fn(),
 }));
 
 vi.mock('../type-availability-policies.api', () => mocks);
@@ -44,7 +44,7 @@ describe('useInstanceTypeAccess', () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
 		mocks.fetchInstancePolicy.mockResolvedValue(nodePolicy(1));
-		mocks.fetchInstanceAccess.mockResolvedValue(nodeAccess(1));
+		mocks.fetchInstanceTypeAccess.mockResolvedValue(nodeAccess(1));
 	});
 
 	it('reads and writes the policy of the kind it is given', async () => {
@@ -63,7 +63,7 @@ describe('useInstanceTypeAccess', () => {
 
 		const { types, changeAccess } = useInstanceTypeAccess('node', setTypeAccess);
 		await waitFor(() => expect(types.value).toHaveLength(1));
-		expect(mocks.fetchInstanceAccess).toHaveBeenCalledWith(expect.anything(), 'node');
+		expect(mocks.fetchInstanceTypeAccess).toHaveBeenCalledWith(expect.anything(), 'node');
 
 		await changeAccess('n8n-nodes-base.slack', 'deny');
 
@@ -95,7 +95,7 @@ describe('useInstanceTypeAccess', () => {
 		expect(types.value[0].access).toBe('deny');
 
 		// Another admin allows it again. The list of that version replaces the pick.
-		mocks.fetchInstanceAccess.mockResolvedValue({ ...nodeAccess(3) });
+		mocks.fetchInstanceTypeAccess.mockResolvedValue({ ...nodeAccess(3) });
 		useInstancePolicyStore().policies.node = nodePolicy(3);
 		await waitFor(() => expect(types.value[0].access).toBe('allow'));
 	});

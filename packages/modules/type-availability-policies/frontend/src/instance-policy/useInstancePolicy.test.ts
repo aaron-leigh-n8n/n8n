@@ -10,6 +10,7 @@ import { useTypeAvailabilityPoliciesStore } from '../type-availability-policies.
 
 const mocks = vi.hoisted(() => ({
 	fetchInstancePolicy: vi.fn(),
+	fetchInstanceTypeAccess: vi.fn(),
 	saveInstancePolicy: vi.fn(),
 	showError: vi.fn(),
 	showMessage: vi.fn(),
@@ -17,6 +18,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('../type-availability-policies.api', () => ({
 	fetchInstancePolicy: mocks.fetchInstancePolicy,
+	fetchInstanceTypeAccess: mocks.fetchInstanceTypeAccess,
 	saveInstancePolicy: mocks.saveInstancePolicy,
 }));
 
@@ -42,6 +44,12 @@ describe('useInstancePolicy', () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
 		mocks.fetchInstancePolicy.mockResolvedValue(policy(1));
+		mocks.fetchInstanceTypeAccess.mockResolvedValue({
+			scopeId: 'scope-1',
+			version: 1,
+			defaultAction: 'allow',
+			types: [],
+		});
 	});
 
 	it('loads both kinds for a user with both policy scopes', async () => {
@@ -70,6 +78,34 @@ describe('useInstancePolicy', () => {
 		await instancePolicy.load();
 
 		expect(mocks.showError).toHaveBeenCalledWith(error, 'Could not load the policy');
+	});
+
+	it('shows an access error, not a policy error, when only the access fails to load', async () => {
+		const instancePolicy = setup(['nodeTypePolicy:manage']);
+		mocks.fetchInstanceTypeAccess.mockRejectedValue(new Error('offline'));
+
+		await instancePolicy.load();
+
+		expect(mocks.showError).toHaveBeenCalledTimes(1);
+		expect(mocks.showError).toHaveBeenCalledWith(
+			new Error('offline'),
+			'Could not load the access of the types',
+		);
+	});
+
+	it('reads the access again and shows an error when it still fails', async () => {
+		const instancePolicy = setup(['nodeTypePolicy:manage']);
+		mocks.fetchInstanceTypeAccess.mockRejectedValue(new Error('offline'));
+		await instancePolicy.load();
+		mocks.showError.mockClear();
+
+		await instancePolicy.loadAccess();
+
+		expect(mocks.fetchInstanceTypeAccess).toHaveBeenCalledTimes(2);
+		expect(mocks.showError).toHaveBeenCalledWith(
+			new Error('offline'),
+			'Could not load the access of the types',
+		);
 	});
 
 	it('says that the policy changed when it changed after the load', async () => {
@@ -167,5 +203,58 @@ describe('useInstancePolicy', () => {
 
 		expect(mocks.showError).not.toHaveBeenCalled();
 		expect(mocks.showMessage).not.toHaveBeenCalled();
+	});
+
+	it('saves the access of one type as a name rule on top of the policy', async () => {
+		const instancePolicy = setup(['nodeTypePolicy:manage']);
+		await instancePolicy.load();
+		mocks.saveInstancePolicy.mockResolvedValue({ ...policy(2), warnings: [] });
+
+		await instancePolicy.setAccess('node', 'n8n-nodes-base.slack', 'deny');
+
+		expect(mocks.saveInstancePolicy).toHaveBeenCalledWith(expect.anything(), 'node', {
+			rules: [
+				{
+					id: expect.any(String),
+					action: 'deny',
+					selector: { kind: 'name', value: 'n8n-nodes-base.slack' },
+				},
+			],
+			defaultAction: 'allow',
+			version: 1,
+		});
+	});
+
+	it('shows an error when a save succeeds but the access cannot be read', async () => {
+		const instancePolicy = setup(['nodeTypePolicy:manage']);
+		await instancePolicy.load();
+		mocks.saveInstancePolicy.mockResolvedValue({ ...policy(2), warnings: [] });
+		mocks.fetchInstanceTypeAccess.mockRejectedValue(new Error('offline'));
+
+		const result = await instancePolicy.save('node', (current) => current);
+
+		expect(result.status).toBe('saved');
+		expect(mocks.showError).toHaveBeenCalledWith(
+			new Error('offline'),
+			'Could not load the access of the types',
+		);
+	});
+
+	it('shows an error when the policy changed and the access of the new policy cannot be read', async () => {
+		const instancePolicy = setup(['nodeTypePolicy:manage']);
+		await instancePolicy.load();
+		mocks.saveInstancePolicy.mockRejectedValue(
+			new ResponseError('Policy scope has changed', { httpStatusCode: 409 }),
+		);
+		mocks.fetchInstancePolicy.mockResolvedValue(policy(2));
+		mocks.fetchInstanceTypeAccess.mockRejectedValue(new Error('offline'));
+
+		const result = await instancePolicy.save('node', (current) => current);
+
+		expect(result).toEqual({ status: 'changed', accessError: new Error('offline') });
+		expect(mocks.showError).toHaveBeenCalledWith(
+			new Error('offline'),
+			'Could not load the access of the types',
+		);
 	});
 });

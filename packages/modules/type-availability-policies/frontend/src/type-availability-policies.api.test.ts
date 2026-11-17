@@ -3,8 +3,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import {
 	fetchCredentialTypeSummaries,
-	fetchInstanceAccess,
 	fetchInstancePolicy,
+	fetchInstanceTypeAccess,
 	saveInstancePolicy,
 } from './type-availability-policies.api';
 
@@ -47,21 +47,20 @@ describe('instance policy requests', () => {
 			version: 3,
 		});
 	});
+
+	it.each([
+		['node', '/node-type-policies/instance/access'],
+		['credential', '/credential-type-policies/instance/access'],
+	] as const)('reads the access of each %s type from %s', async (kind, endpoint) => {
+		await fetchInstanceTypeAccess(context, kind);
+
+		expect(makeRestApiRequest).toHaveBeenCalledWith(context, 'GET', endpoint);
+	});
 });
 
-describe('instance access requests', () => {
+describe('credential type summaries', () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
-	});
-
-	it('reads the credential access list from the access route', async () => {
-		await fetchInstanceAccess(context, 'credential');
-
-		expect(makeRestApiRequest).toHaveBeenCalledWith(
-			context,
-			'GET',
-			'/credential-type-policies/instance/access',
-		);
 	});
 
 	it('reads the name, icon and parents of each credential type and skips malformed entries', async () => {

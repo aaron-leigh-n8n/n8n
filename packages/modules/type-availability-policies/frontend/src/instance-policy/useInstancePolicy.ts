@@ -1,7 +1,9 @@
+import type { PolicyAction } from '@n8n/api-types';
 import { useToast } from '@n8n/composables/useToast';
 import { useI18n } from '@n8n/i18n';
 
 import { useInstancePolicyStore, type InstancePolicySaveResult } from './instance-policy.store';
+import { withTypeAccess } from './typeAccessRule';
 import { usePolicyAdminAccess } from '../composables/usePolicyAdminAccess';
 import type { InstancePolicy, InstancePolicyContent } from '../type-availability-policies.api';
 import type { RestrictedTypeKind } from '../type-availability-policies.constants';
@@ -13,10 +15,28 @@ export function useInstancePolicy() {
 	const { manageableKinds } = usePolicyAdminAccess();
 
 	async function load(): Promise<void> {
-		const [error] = await store.load(manageableKinds.value);
-		if (error !== undefined) {
-			toast.showError(error, i18n.baseText('typeAvailabilityPolicies.instancePolicy.loadError'));
+		const { errors, accessErrors } = await store.load(manageableKinds.value);
+		if (errors.length > 0) {
+			toast.showError(
+				errors[0],
+				i18n.baseText('typeAvailabilityPolicies.instancePolicy.loadError'),
+			);
+		} else if (accessErrors.length > 0) {
+			showAccessError(accessErrors[0]);
 		}
+	}
+
+	/** Reads the access of the types again, for example after an earlier read failed. */
+	async function loadAccess(): Promise<void> {
+		const [error] = await store.loadAccess(manageableKinds.value);
+		if (error !== undefined) showAccessError(error);
+	}
+
+	function showAccessError(error: unknown) {
+		toast.showError(
+			error,
+			i18n.baseText('typeAvailabilityPolicies.instancePolicy.accessLoadError'),
+		);
 	}
 
 	async function save<K extends RestrictedTypeKind>(
@@ -47,14 +67,32 @@ export function useInstancePolicy() {
 			);
 		}
 
+		if (
+			(result.status === 'saved' || result.status === 'changed') &&
+			result.accessError !== undefined
+		) {
+			showAccessError(result.accessError);
+		}
+
 		return result;
+	}
+
+	async function setAccess(
+		kind: RestrictedTypeKind,
+		typeName: string,
+		action: PolicyAction,
+	): Promise<InstancePolicySaveResult> {
+		return await save(kind, (policy) => withTypeAccess(kind, policy, typeName, action));
 	}
 
 	return {
 		policies: store.policies,
 		loadStates: store.loadStates,
 		notEditable: store.notEditable,
+		typeAccess: store.typeAccess,
 		load,
+		loadAccess,
 		save,
+		setAccess,
 	};
 }

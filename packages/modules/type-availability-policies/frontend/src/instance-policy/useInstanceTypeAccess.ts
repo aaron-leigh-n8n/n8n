@@ -6,7 +6,10 @@ import { useRootStore } from '@n8n/stores/useRootStore';
 import { computed, reactive, ref, shallowRef, toRaw, watch } from 'vue';
 
 import { useInstancePolicy } from './useInstancePolicy';
-import { fetchInstanceAccess, type InstancePolicyContent } from '../type-availability-policies.api';
+import {
+	fetchInstanceTypeAccess,
+	type InstancePolicyContent,
+} from '../type-availability-policies.api';
 import type { RestrictedTypeKind } from '../type-availability-policies.constants';
 
 export type InstanceTypeAccessRow = {
@@ -62,7 +65,7 @@ export function useInstanceTypeAccess<K extends RestrictedTypeKind>(
 		const isLatest = latestLoad.next();
 		loadingAccess.value = true;
 		try {
-			const loaded = await fetchInstanceAccess(rootStore.restApiContext, kind);
+			const loaded = await fetchInstanceTypeAccess(rootStore.restApiContext, kind);
 			if (!isLatest()) return;
 			response.value = loaded;
 			for (const [name, change] of pending) {

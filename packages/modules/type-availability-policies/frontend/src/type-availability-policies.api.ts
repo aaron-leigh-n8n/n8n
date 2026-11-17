@@ -63,7 +63,8 @@ export async function saveInstancePolicy<K extends RestrictedTypeKind>(
 	});
 }
 
-export async function fetchInstanceAccess(
+/** What the instance policy alone decides for every known type of one kind. */
+export async function fetchInstanceTypeAccess(
 	context: IRestApiContext,
 	kind: RestrictedTypeKind,
 ): Promise<InstanceTypeAccessResponse> {
