@@ -275,8 +275,9 @@ describe('NodeTypeAccessDialog', () => {
 		expect(emitted('update:open')).toEqual([[false]]);
 	});
 
-	it('shows the saved access again when a save fails', async () => {
-		mocks.saveInstancePolicy.mockRejectedValue(new Error('offline'));
+	it('shows the chosen access while the save runs, and the saved access again when it fails', async () => {
+		const save = createDeferredPromise<never>();
+		mocks.saveInstancePolicy.mockReturnValue(save.promise);
 		const { getByTestId } = await setup('n8n-nodes-base.notion');
 		const notionOAuth = () =>
 			within(getByTestId('node-type-access-related-credential')).getAllByTestId(
@@ -284,8 +285,15 @@ describe('NodeTypeAccessDialog', () => {
 			)[1];
 
 		await fireEvent.click(notionOAuth());
+		expect(notionOAuth()).toHaveAttribute('data-value', 'deny');
+		save.reject(new Error('offline'));
 
-		await waitFor(() => expect(toast.showError).toHaveBeenCalled());
+		await waitFor(() =>
+			expect(toast.showError).toHaveBeenCalledWith(
+				new Error('offline'),
+				'Could not save the policy',
+			),
+		);
 		await waitFor(() => expect(notionOAuth()).toHaveAttribute('data-value', 'allow'));
 	});
 

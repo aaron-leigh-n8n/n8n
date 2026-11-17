@@ -130,6 +130,41 @@ describe('useInstancePolicyStore', () => {
 			expect(store.typeAccess.node?.byName.get('n8n-nodes-base.slack')).toBe('deny');
 		});
 
+		it('reports the read error, and shows no access, when the policy changed and its access cannot be read', async () => {
+			mocks.saveInstancePolicy.mockRejectedValue(conflict());
+			const store = useInstancePolicyStore();
+			await store.load(['node']);
+			mocks.fetchInstancePolicy.mockResolvedValue(nodePolicy(4, [DENY_SLACK]));
+			mocks.fetchInstanceTypeAccess.mockRejectedValue(new Error('offline'));
+
+			const result = await store.save('node', addDenySlack);
+
+			expect(result).toEqual({ status: 'changed', accessError: new Error('offline') });
+			expect(store.typeAccess.node).toBeNull();
+		});
+
+		it('sends the next save of a kind before the access read of the previous save ends', async () => {
+			const store = useInstancePolicyStore();
+			await store.load(['node']);
+			const firstRead = createDeferredPromise<ReturnType<typeof accessResponse>>();
+			mocks.fetchInstanceTypeAccess.mockReturnValueOnce(firstRead.promise);
+			mocks.fetchInstanceTypeAccess.mockResolvedValue(accessResponse(5, 'deny'));
+			mocks.saveInstancePolicy
+				.mockResolvedValueOnce({ ...nodePolicy(4, [DENY_SLACK]), warnings: [] })
+				.mockResolvedValueOnce({ ...nodePolicy(5, [DENY_SLACK]), warnings: [] });
+
+			const first = store.save('node', addDenySlack);
+			const second = store.save('node', (policy) => policy);
+			await vi.waitFor(() => expect(mocks.saveInstancePolicy).toHaveBeenCalledTimes(2));
+			await second;
+			firstRead.resolve(accessResponse(4));
+			await first;
+
+			expect(store.policies.node?.version).toBe(5);
+			expect(store.typeAccess.node?.version).toBe(5);
+			expect(store.typeAccess.node?.byName.get('n8n-nodes-base.slack')).toBe('deny');
+		});
+
 		it('loads the policy when the access read fails', async () => {
 			mocks.fetchInstanceTypeAccess.mockRejectedValue(new Error('offline'));
 			const store = useInstancePolicyStore();

@@ -4,7 +4,6 @@ import {
 	N8nButton,
 	N8nDialog,
 	N8nDialogBody,
-	N8nDialogDescription,
 	N8nDialogFooter,
 	N8nTabs,
 	N8nText,
@@ -166,8 +165,11 @@ async function setAccess(kind: RestrictedTypeKind, name: string, action: PolicyA
 			<N8nTabs :model-value="RELATED_TAB" :options="tabs" />
 
 			<template v-if="typesLoaded">
-				<N8nDialogDescription
+				<N8nText
 					v-if="ANY_CREDENTIAL_NODE_TYPES.has(nodeType) && canManage('credential')"
+					tag="p"
+					size="small"
+					color="text-dark"
 					data-test-id="node-type-access-any-credential"
 				>
 					{{
@@ -175,9 +177,12 @@ async function setAccess(kind: RestrictedTypeKind, name: string, action: PolicyA
 							interpolate: { name: nodeName },
 						})
 					}}
-				</N8nDialogDescription>
-				<N8nDialogDescription
+				</N8nText>
+				<N8nText
 					v-else-if="sections.length === 0"
+					tag="p"
+					size="small"
+					color="text-dark"
 					data-test-id="node-type-access-empty"
 				>
 					{{
@@ -185,15 +190,15 @@ async function setAccess(kind: RestrictedTypeKind, name: string, action: PolicyA
 							interpolate: { name: nodeName },
 						})
 					}}
-				</N8nDialogDescription>
+				</N8nText>
 				<template v-else>
-					<N8nDialogDescription>
+					<N8nText tag="p" size="small" color="text-dark">
 						{{
 							i18n.baseText('typeAvailabilityPolicies.nodeDialog.related.description', {
 								interpolate: { name: nodeName },
 							})
 						}}
-					</N8nDialogDescription>
+					</N8nText>
 					<section
 						v-for="section in sections"
 						:key="section.kind"

@@ -206,6 +206,27 @@ describe('useInstancePolicy', () => {
 		const result = await instancePolicy.save('node', (current) => current);
 
 		expect(result.status).toBe('saved');
-		expect(mocks.showError).toHaveBeenCalledWith(new Error('offline'), 'Could not load the policy');
+		expect(mocks.showError).toHaveBeenCalledWith(
+			new Error('offline'),
+			'Could not load the access of the types',
+		);
+	});
+
+	it('shows an error when the policy changed and the access of the new policy cannot be read', async () => {
+		const instancePolicy = setup(['nodeTypePolicy:manage']);
+		await instancePolicy.load();
+		mocks.saveInstancePolicy.mockRejectedValue(
+			new ResponseError('Policy scope has changed', { httpStatusCode: 409 }),
+		);
+		mocks.fetchInstancePolicy.mockResolvedValue(policy(2));
+		mocks.fetchInstanceTypeAccess.mockRejectedValue(new Error('offline'));
+
+		const result = await instancePolicy.save('node', (current) => current);
+
+		expect(result).toEqual({ status: 'changed', accessError: new Error('offline') });
+		expect(mocks.showError).toHaveBeenCalledWith(
+			new Error('offline'),
+			'Could not load the access of the types',
+		);
 	});
 });

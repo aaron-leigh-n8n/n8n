@@ -42,15 +42,20 @@ export function useInstancePolicy() {
 				message: i18n.baseText('typeAvailabilityPolicies.instancePolicy.notEditable.message'),
 				duration: 0,
 			});
-		} else if (result.status === 'saved' && result.accessError !== undefined) {
-			toast.showError(
-				result.accessError,
-				i18n.baseText('typeAvailabilityPolicies.instancePolicy.loadError'),
-			);
 		} else if (result.status === 'failed') {
 			toast.showError(
 				result.error,
 				i18n.baseText('typeAvailabilityPolicies.instancePolicy.saveError'),
+			);
+		}
+
+		if (
+			(result.status === 'saved' || result.status === 'changed') &&
+			result.accessError !== undefined
+		) {
+			toast.showError(
+				result.accessError,
+				i18n.baseText('typeAvailabilityPolicies.instancePolicy.accessLoadError'),
 			);
 		}
 
