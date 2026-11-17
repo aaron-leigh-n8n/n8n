@@ -41,6 +41,8 @@ const toast = useToast();
 // Until the types load, the index is empty and every node type would look unrelated.
 const typesLoaded = ref(false);
 onMounted(async () => {
+	// A failed earlier read leaves the dropdowns disabled, so each open tries again.
+	void instancePolicy.loadAccess();
 	try {
 		await typeDescriptions.load();
 		typesLoaded.value = true;

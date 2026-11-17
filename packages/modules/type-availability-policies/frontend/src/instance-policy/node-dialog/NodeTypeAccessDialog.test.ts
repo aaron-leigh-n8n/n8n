@@ -267,6 +267,17 @@ describe('NodeTypeAccessDialog', () => {
 		).toBeInTheDocument();
 	});
 
+	it('reads the access again on open when an earlier read failed', async () => {
+		mocks.fetchInstanceTypeAccess.mockRejectedValueOnce(new Error('offline'));
+		const { getByTestId } = await setup('n8n-nodes-base.notion', ['nodeTypePolicy:manage']);
+
+		await waitFor(() =>
+			expect(
+				within(getByTestId('node-type-access-node')).getByTestId('type-access-select'),
+			).toHaveAttribute('data-value', 'allow'),
+		);
+	});
+
 	it('closes on Done', async () => {
 		const { getByTestId, emitted } = await setup('n8n-nodes-base.notion');
 

@@ -80,6 +80,34 @@ describe('useInstancePolicy', () => {
 		expect(mocks.showError).toHaveBeenCalledWith(error, 'Could not load the policy');
 	});
 
+	it('shows an access error, not a policy error, when only the access fails to load', async () => {
+		const instancePolicy = setup(['nodeTypePolicy:manage']);
+		mocks.fetchInstanceTypeAccess.mockRejectedValue(new Error('offline'));
+
+		await instancePolicy.load();
+
+		expect(mocks.showError).toHaveBeenCalledTimes(1);
+		expect(mocks.showError).toHaveBeenCalledWith(
+			new Error('offline'),
+			'Could not load the access of the types',
+		);
+	});
+
+	it('reads the access again and shows an error when it still fails', async () => {
+		const instancePolicy = setup(['nodeTypePolicy:manage']);
+		mocks.fetchInstanceTypeAccess.mockRejectedValue(new Error('offline'));
+		await instancePolicy.load();
+		mocks.showError.mockClear();
+
+		await instancePolicy.loadAccess();
+
+		expect(mocks.fetchInstanceTypeAccess).toHaveBeenCalledTimes(2);
+		expect(mocks.showError).toHaveBeenCalledWith(
+			new Error('offline'),
+			'Could not load the access of the types',
+		);
+	});
+
 	it('says that the policy changed when it changed after the load', async () => {
 		const instancePolicy = setup(['nodeTypePolicy:manage']);
 		await instancePolicy.load();

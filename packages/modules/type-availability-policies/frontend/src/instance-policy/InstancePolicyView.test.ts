@@ -19,7 +19,7 @@ const { route, push, replace, fetchInstancePolicy } = vi.hoisted(() => ({
 
 vi.mock('../type-availability-policies.api', () => ({
 	fetchInstancePolicy,
-	fetchInstanceTypeAccess: vi.fn(),
+	fetchInstanceTypeAccess: vi.fn().mockResolvedValue({ scopeId: null, version: 0, types: [] }),
 	saveInstancePolicy: vi.fn(),
 }));
 

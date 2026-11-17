@@ -165,13 +165,49 @@ describe('useInstancePolicyStore', () => {
 			expect(store.typeAccess.node?.byName.get('n8n-nodes-base.slack')).toBe('deny');
 		});
 
+		it('keeps no access when an older read ends after a newer read failed', async () => {
+			const olderRead = createDeferredPromise<ReturnType<typeof accessResponse>>();
+			mocks.fetchInstanceTypeAccess.mockReturnValueOnce(olderRead.promise);
+			const store = useInstancePolicyStore();
+			const olderLoad = store.load(['node']);
+			await vi.waitFor(() => expect(mocks.fetchInstanceTypeAccess).toHaveBeenCalledTimes(1));
+			mocks.fetchInstancePolicy.mockResolvedValue(nodePolicy(4));
+			mocks.fetchInstanceTypeAccess.mockRejectedValue(new Error('offline'));
+
+			await store.load(['node']);
+			olderRead.resolve(accessResponse(3));
+			await olderLoad;
+
+			expect(store.typeAccess.node).toBeNull();
+		});
+
+		it('reads the access again on request after a failed read', async () => {
+			mocks.fetchInstanceTypeAccess.mockRejectedValueOnce(new Error('offline'));
+			const store = useInstancePolicyStore();
+			await store.load(['node']);
+
+			const errors = await store.loadAccess(['node']);
+
+			expect(errors).toEqual([]);
+			expect(store.typeAccess.node?.version).toBe(3);
+		});
+
+		it('does not read the access again when it matches the policy', async () => {
+			const store = useInstancePolicyStore();
+			await store.load(['node']);
+
+			await store.loadAccess(['node']);
+
+			expect(mocks.fetchInstanceTypeAccess).toHaveBeenCalledTimes(1);
+		});
+
 		it('loads the policy when the access read fails', async () => {
 			mocks.fetchInstanceTypeAccess.mockRejectedValue(new Error('offline'));
 			const store = useInstancePolicyStore();
 
-			const errors = await store.load(['node']);
+			const result = await store.load(['node']);
 
-			expect(errors).toEqual([new Error('offline')]);
+			expect(result).toEqual({ errors: [], accessErrors: [new Error('offline')] });
 			expect(store.policies.node).toEqual(nodePolicy(3));
 			expect(store.loadStates.node).toBe('loaded');
 			expect(store.typeAccess.node).toBeNull();
@@ -182,9 +218,9 @@ describe('useInstancePolicyStore', () => {
 		it('loads the policy of each kind', async () => {
 			const store = useInstancePolicyStore();
 
-			const errors = await store.load(['node', 'credential']);
+			const result = await store.load(['node', 'credential']);
 
-			expect(errors).toEqual([]);
+			expect(result).toEqual({ errors: [], accessErrors: [] });
 			expect(store.policies.node).toEqual(nodePolicy(3));
 			expect(store.policies.credential).toEqual(credentialPolicy(7));
 			expect(store.loadStates).toEqual({ node: 'loaded', credential: 'loaded' });
@@ -208,9 +244,9 @@ describe('useInstancePolicyStore', () => {
 			});
 			const store = useInstancePolicyStore();
 
-			const errors = await store.load(['node', 'credential']);
+			const result = await store.load(['node', 'credential']);
 
-			expect(errors).toEqual([error]);
+			expect(result).toEqual({ errors: [error], accessErrors: [] });
 			expect(store.policies.node).toEqual(nodePolicy(3));
 			expect(store.loadStates).toEqual({ node: 'loaded', credential: 'failed' });
 		});
@@ -239,7 +275,7 @@ describe('useInstancePolicyStore', () => {
 			await store.load(['node']);
 			older.reject(new Error('Network'));
 
-			expect(await olderLoad).toEqual([]);
+			expect(await olderLoad).toEqual({ errors: [], accessErrors: [] });
 			expect(store.loadStates.node).toBe('loaded');
 			expect(store.policies.node).toEqual(nodePolicy(3));
 		});
