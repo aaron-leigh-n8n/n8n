@@ -128,14 +128,18 @@ export class SkillRepository {
 		return await query.getMany();
 	}
 
-	/** Read all open source groups on one page in one query. */
+	/** Read the page slice across its open source groups. */
 	async findVisibleSourceSkills(
 		visibility: SkillVisibility,
 		filter: SkillMatchFilter,
 		sourceIds: string[],
+		slice: { skip: number; take: number },
 	): Promise<Skill[]> {
 		const skills: Skill[] = [];
+		let skip = slice.skip;
 		for (const ids of chunkIds(sourceIds)) {
+			const remaining = slice.take - skills.length;
+			if (remaining <= 0) break;
 			const query = this.filteredQuery(visibility, filter, {});
 			if (!query) return [];
 			const sourceOrder = ids.map(
@@ -151,8 +155,11 @@ export class SkillRepository {
 					filter.sort?.order ?? 'DESC',
 				)
 				.addOrderBy('skill.id', 'ASC')
+				.offset(skip)
+				.limit(remaining)
 				.getMany();
 			skills.push(...rows);
+			skip = 0;
 		}
 		return skills;
 	}
