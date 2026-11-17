@@ -1,7 +1,11 @@
 import type { IRestApiContext } from '@n8n/rest-api-client';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-import { fetchInstancePolicy, saveInstancePolicy } from './type-availability-policies.api';
+import {
+	fetchInstancePolicy,
+	fetchInstanceTypeAccess,
+	saveInstancePolicy,
+} from './type-availability-policies.api';
 
 const { makeRestApiRequest } = vi.hoisted(() => ({ makeRestApiRequest: vi.fn() }));
 
@@ -37,5 +41,14 @@ describe('instance policy requests', () => {
 			defaultAction: 'deny',
 			version: 3,
 		});
+	});
+
+	it.each([
+		['node', '/node-type-policies/instance/access'],
+		['credential', '/credential-type-policies/instance/access'],
+	] as const)('reads the access of each %s type from %s', async (kind, endpoint) => {
+		await fetchInstanceTypeAccess(context, kind);
+
+		expect(makeRestApiRequest).toHaveBeenCalledWith(context, 'GET', endpoint);
 	});
 });

@@ -10,6 +10,7 @@ import { useTypeAvailabilityPoliciesStore } from '../type-availability-policies.
 
 const mocks = vi.hoisted(() => ({
 	fetchInstancePolicy: vi.fn(),
+	fetchInstanceTypeAccess: vi.fn(),
 	saveInstancePolicy: vi.fn(),
 	showError: vi.fn(),
 	showMessage: vi.fn(),
@@ -17,6 +18,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('../type-availability-policies.api', () => ({
 	fetchInstancePolicy: mocks.fetchInstancePolicy,
+	fetchInstanceTypeAccess: mocks.fetchInstanceTypeAccess,
 	saveInstancePolicy: mocks.saveInstancePolicy,
 }));
 
@@ -42,6 +44,12 @@ describe('useInstancePolicy', () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
 		mocks.fetchInstancePolicy.mockResolvedValue(policy(1));
+		mocks.fetchInstanceTypeAccess.mockResolvedValue({
+			scopeId: 'scope-1',
+			version: 1,
+			defaultAction: 'allow',
+			types: [],
+		});
 	});
 
 	it('loads both kinds for a user with both policy scopes', async () => {
@@ -167,5 +175,37 @@ describe('useInstancePolicy', () => {
 
 		expect(mocks.showError).not.toHaveBeenCalled();
 		expect(mocks.showMessage).not.toHaveBeenCalled();
+	});
+
+	it('saves the access of one type as a name rule on top of the policy', async () => {
+		const instancePolicy = setup(['nodeTypePolicy:manage']);
+		await instancePolicy.load();
+		mocks.saveInstancePolicy.mockResolvedValue({ ...policy(2), warnings: [] });
+
+		await instancePolicy.setAccess('node', 'n8n-nodes-base.slack', 'deny');
+
+		expect(mocks.saveInstancePolicy).toHaveBeenCalledWith(expect.anything(), 'node', {
+			rules: [
+				{
+					id: expect.any(String),
+					action: 'deny',
+					selector: { kind: 'name', value: 'n8n-nodes-base.slack' },
+				},
+			],
+			defaultAction: 'allow',
+			version: 1,
+		});
+	});
+
+	it('shows an error when a save succeeds but the access cannot be read', async () => {
+		const instancePolicy = setup(['nodeTypePolicy:manage']);
+		await instancePolicy.load();
+		mocks.saveInstancePolicy.mockResolvedValue({ ...policy(2), warnings: [] });
+		mocks.fetchInstanceTypeAccess.mockRejectedValue(new Error('offline'));
+
+		const result = await instancePolicy.save('node', (current) => current);
+
+		expect(result.status).toBe('saved');
+		expect(mocks.showError).toHaveBeenCalledWith(new Error('offline'), 'Could not load the policy');
 	});
 });

@@ -19,6 +19,7 @@ const { route, push, replace, fetchInstancePolicy } = vi.hoisted(() => ({
 
 vi.mock('../type-availability-policies.api', () => ({
 	fetchInstancePolicy,
+	fetchInstanceTypeAccess: vi.fn(),
 	saveInstancePolicy: vi.fn(),
 }));
 
@@ -27,7 +28,16 @@ vi.mock('vue-router', () => ({
 	useRouter: () => ({ push, replace }),
 }));
 
-const renderView = createComponentRenderer(InstancePolicyView);
+const nodeTypeAccessDialogStub = {
+	props: ['open', 'nodeType'],
+	emits: ['update:open'],
+	template:
+		'<button data-test-id="node-type-access-dialog" :data-node-type="nodeType" @click="$emit(\'update:open\', false)" />',
+};
+
+const renderView = createComponentRenderer(InstancePolicyView, {
+	global: { stubs: { NodeTypeAccessDialog: nodeTypeAccessDialogStub } },
+});
 
 const BOTH_SCOPES: Scope[] = ['nodeTypePolicy:manage', 'credentialTypePolicy:manage'];
 
@@ -131,5 +141,30 @@ describe('InstancePolicyView', () => {
 		await fireEvent.click(getByText('Credentials'));
 
 		expect(replace).toHaveBeenCalledWith({ query: { tab: 'credential' } });
+	});
+
+	it('opens the node dialog named in the query', () => {
+		const { getByTestId } = setup(BOTH_SCOPES, { details: 'n8n-nodes-base.notion' });
+
+		expect(getByTestId('node-type-access-dialog')).toHaveAttribute(
+			'data-node-type',
+			'n8n-nodes-base.notion',
+		);
+	});
+
+	it('does not open the node dialog for a user who cannot manage node types', () => {
+		const { queryByTestId } = setup(['credentialTypePolicy:manage'], {
+			details: 'n8n-nodes-base.notion',
+		});
+
+		expect(queryByTestId('node-type-access-dialog')).not.toBeInTheDocument();
+	});
+
+	it('removes the node from the query when the dialog closes', async () => {
+		const { getByTestId } = setup(BOTH_SCOPES, { tab: 'node', details: 'n8n-nodes-base.notion' });
+
+		await fireEvent.click(getByTestId('node-type-access-dialog'));
+
+		expect(replace).toHaveBeenCalledWith({ query: { tab: 'node' } });
 	});
 });

@@ -3,11 +3,13 @@ import type { IUser } from '@n8n/rest-api-client/api/users';
 import { useUsersStore } from '@n8n/stores/users.store';
 import { createTestingPinia } from '@pinia/testing';
 import { setActivePinia } from 'pinia';
+import type { ICredentialType, INodeTypeDescription } from 'n8n-workflow';
 import { mock } from 'vitest-mock-extended';
 
 import { registerShellCapabilities } from './capabilities.manifest';
 
 import { ABOUT_MODAL_KEY } from '@/app/constants/modals';
+import { useNodeTypesStore } from '@/app/stores/nodeTypes.store';
 import { useUIStore } from '@/app/stores/ui.store';
 import { useExistingWorkflowDocumentStore } from '@/app/stores/workflowDocument.store';
 import { useWorkflowsListStore } from '@/app/stores/workflowsList.store';
@@ -17,6 +19,7 @@ import { useProjectsStore } from '@/features/collaboration/projects/projects.sto
 import type { ProjectListItem } from '@/features/collaboration/projects/projects.types';
 import { useSourceControlStore } from '@/features/integrations/sourceControl.ee/sourceControl.store';
 import { CREDENTIAL_EDIT_MODAL_KEY } from '@/features/credentials/credentials.constants';
+import { useCredentialsStore } from '@/features/credentials/credentials.store';
 import { VARIABLE_MODAL_KEY } from '@/features/settings/environments.ee/environments.constants';
 import { useTagsStore } from '@/features/shared/tags/tags.store';
 import type { Project } from '@/features/collaboration/projects/projects.types';
@@ -340,6 +343,27 @@ describe('registerShellCapabilities', () => {
 
 			expect(tags.nameOf('tag')).toBe('Billing');
 			expect(tags.nameOf('unknown')).toBeUndefined();
+		});
+	});
+
+	describe('type descriptions', () => {
+		it('loads the node and credential types and reads them from their stores', async () => {
+			registerShellCapabilities();
+			const nodeTypesStore = mockedStore(useNodeTypesStore);
+			const credentialsStore = mockedStore(useCredentialsStore);
+			const notion = mock<INodeTypeDescription>({ name: 'n8n-nodes-base.notion' });
+			nodeTypesStore.allNodeTypes = [notion];
+			credentialsStore.getCredentialTypeByName = vi.fn((name: string) =>
+				name === 'notionApi' ? mock<ICredentialType>({ displayName: 'Notion API' }) : undefined,
+			);
+			const types = capabilityRegistry.use(capabilities.typeDescriptions);
+
+			await types.load();
+
+			expect(nodeTypesStore.loadNodeTypesIfNotLoaded).toHaveBeenCalled();
+			expect(credentialsStore.fetchCredentialTypes).toHaveBeenCalledWith(false);
+			expect(types.nodeTypes()).toEqual([notion]);
+			expect(types.credentialTypeDisplayName('notionApi')).toBe('Notion API');
 		});
 	});
 });

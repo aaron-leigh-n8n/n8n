@@ -1,7 +1,9 @@
+import type { PolicyAction } from '@n8n/api-types';
 import { useToast } from '@n8n/composables/useToast';
 import { useI18n } from '@n8n/i18n';
 
 import { useInstancePolicyStore, type InstancePolicySaveResult } from './instance-policy.store';
+import { withTypeAccess } from './typeAccessRule';
 import { usePolicyAdminAccess } from '../composables/usePolicyAdminAccess';
 import type { InstancePolicy, InstancePolicyContent } from '../type-availability-policies.api';
 import type { RestrictedTypeKind } from '../type-availability-policies.constants';
@@ -40,6 +42,11 @@ export function useInstancePolicy() {
 				message: i18n.baseText('typeAvailabilityPolicies.instancePolicy.notEditable.message'),
 				duration: 0,
 			});
+		} else if (result.status === 'saved' && result.accessError !== undefined) {
+			toast.showError(
+				result.accessError,
+				i18n.baseText('typeAvailabilityPolicies.instancePolicy.loadError'),
+			);
 		} else if (result.status === 'failed') {
 			toast.showError(
 				result.error,
@@ -50,11 +57,21 @@ export function useInstancePolicy() {
 		return result;
 	}
 
+	async function setAccess(
+		kind: RestrictedTypeKind,
+		typeName: string,
+		action: PolicyAction,
+	): Promise<InstancePolicySaveResult> {
+		return await save(kind, (policy) => withTypeAccess(kind, policy, typeName, action));
+	}
+
 	return {
 		policies: store.policies,
 		loadStates: store.loadStates,
 		notEditable: store.notEditable,
+		typeAccess: store.typeAccess,
 		load,
 		save,
+		setAccess,
 	};
 }

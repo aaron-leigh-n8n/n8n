@@ -6,6 +6,7 @@ import { useI18n } from '@n8n/i18n';
 import { computed, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 
+import NodeTypeAccessDialog from './node-dialog/NodeTypeAccessDialog.vue';
 import { useInstancePolicy } from './useInstancePolicy';
 import { usePolicyAdminAccess } from '../composables/usePolicyAdminAccess';
 import {
@@ -38,6 +39,19 @@ const activeTab = computed<RestrictedTypeKind | undefined>({
 		void router.replace({ query: { ...route.query, tab } });
 	},
 });
+
+// The open node dialog lives in the query, as `?details=<node type>`, so a link can open it.
+const detailsNodeType = computed(() => {
+	const { details } = route.query;
+	return typeof details === 'string' && details && manageableKinds.value.includes('node')
+		? details
+		: undefined;
+});
+
+function closeDetails() {
+	const { details: _closed, ...query } = route.query;
+	void router.replace({ query });
+}
 
 // A user who skips the landing page on the way in goes back to Policies.
 const back = computed(() =>
@@ -80,6 +94,12 @@ onMounted(() => {
 			v-model="activeTab"
 			:options="tabOptions"
 			data-test-id="instance-policy-tabs"
+		/>
+		<NodeTypeAccessDialog
+			v-if="detailsNodeType"
+			open
+			@update:open="closeDetails"
+			:node-type="detailsNodeType"
 		/>
 	</N8nSettingsLayout>
 </template>

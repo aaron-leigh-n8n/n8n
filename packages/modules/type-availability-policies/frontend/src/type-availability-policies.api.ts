@@ -4,6 +4,7 @@ import type {
 	CredentialTransferPreview,
 	CredentialTypePolicyEffectivePublicDto,
 	FolderTransferPreview,
+	InstanceTypeAccessResponse,
 	PolicyEffectivePublicDto,
 	PolicyEffectiveWriteResultPublicDto,
 	SubWorkflowPolicyCheckResponse,
@@ -57,6 +58,14 @@ export async function saveInstancePolicy<K extends RestrictedTypeKind>(
 		defaultAction: policy.defaultAction,
 		version: policy.version,
 	});
+}
+
+/** What the instance policy alone decides for every known type of one kind. */
+export async function fetchInstanceTypeAccess(
+	context: IRestApiContext,
+	kind: RestrictedTypeKind,
+): Promise<InstanceTypeAccessResponse> {
+	return await makeRestApiRequest(context, 'GET', `${INSTANCE_POLICY_ENDPOINT[kind]}/access`);
 }
 
 export async function fetchAvailableTypes(
