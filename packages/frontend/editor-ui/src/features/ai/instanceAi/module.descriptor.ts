@@ -136,6 +136,17 @@ export const InstanceAiModule = defineFrontendModule({
 			beforeEnter: selfHealingGuard('personalTab'),
 		},
 		{
+			// Prototype only: a scripted flow in the real thread UI. It sits outside
+			// `/assistant`, so it needs no connected model and no finished setup.
+			name: 'InstanceAiCapabilityPrototype',
+			path: '/assistant-prototype/capabilities',
+			component: async () => await import('./capabilityPrototype/CapabilityPrototypeView.vue'),
+			meta: {
+				layout: 'instanceAi',
+				middleware: ['authenticated'],
+			},
+		},
+		{
 			path: '/assistant',
 			component: InstanceAiView,
 			beforeEnter: () => (useInstanceAiAvailable().value ? true : { name: VIEWS.HOMEPAGE }),

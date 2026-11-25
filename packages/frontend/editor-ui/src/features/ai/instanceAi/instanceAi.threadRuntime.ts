@@ -555,6 +555,21 @@ export function buildRoutingFromMessages(messages: InstanceAiMessage[]): {
 export type ThreadRuntime = ReturnType<typeof createThreadRuntime>;
 
 /**
+ * Prototype only. A thread with a scripted responder answers on the client:
+ * the responder applies events itself, and no message goes to the backend.
+ */
+export type ScriptedResponder = (input: {
+	message: string;
+	attachments?: InstanceAiAttachment[];
+	applyEvent: (event: InstanceAiEvent) => void;
+}) => void;
+const scriptedResponders = new Map<string, ScriptedResponder>();
+export function setScriptedResponder(threadId: string, responder: ScriptedResponder | null): void {
+	if (responder) scriptedResponders.set(threadId, responder);
+	else scriptedResponders.delete(threadId);
+}
+
+/**
  * Owns state for exactly one thread: messages, SSE, reducer state, hydration,
  * feedback and resource registries.
  */
@@ -1740,6 +1755,12 @@ export function createThreadRuntime(
 			mentionCounts = EMPTY_ASSISTANT_MENTION_COUNTS,
 			mentionedWorkflowIds = [],
 		} = opts;
+		const scriptedResponder = scriptedResponders.get(threadId);
+		if (scriptedResponder) {
+			pushOptimisticUserMessage(message, attachments, handoffContext);
+			scriptedResponder({ message, attachments, applyEvent });
+			return true;
+		}
 		const metricGeneration = responseMetricGeneration;
 		amendContext.value = null;
 		pendingMessageCount.value += 1;

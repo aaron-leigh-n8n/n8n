@@ -20,6 +20,9 @@ import { useRoute } from 'vue-router';
 import { VIEWS } from '@/app/constants';
 import { getNodeIconSize, type NodeIconSource } from '@/app/utils/nodeIcon';
 
+// Prototype only: the subtitle of the stand-in capability node types.
+const GATEWAY_CREDITS_SUBTITLE = 'Gateway credits';
+
 const $style = useCssModule();
 const i18n = useI18n();
 
@@ -260,6 +263,14 @@ function onActivate(event: MouseEvent) {
 			<div v-if="isRestricted" :class="$style.subtitle" data-test-id="canvas-node-restricted">
 				{{ i18n.baseText('node.restricted') }}
 			</div>
+			<!-- Prototype only: a capability node shows what pays for it as a chip. -->
+			<div
+				v-else-if="subtitle === GATEWAY_CREDITS_SUBTITLE"
+				:class="$style.creditsChip"
+				data-test-id="canvas-node-gateway-credits"
+			>
+				{{ subtitle }}
+			</div>
 			<div v-else-if="subtitle && !isNotInstalledCommunityNode" :class="$style.subtitle">
 				{{ subtitle }}
 			</div>
@@ -482,6 +493,21 @@ function onActivate(event: MouseEvent) {
 	text-overflow: ellipsis;
 	line-height: var(--line-height--sm);
 	font-weight: var(--font-weight--regular);
+}
+
+// Prototype only.
+.creditsChip {
+	display: inline-flex;
+	align-items: center;
+	align-self: center;
+	padding: var(--spacing--5xs) var(--spacing--2xs);
+	border-radius: var(--radius);
+	background: var(--color--blue-100);
+	color: var(--color--blue-700);
+	font-size: var(--font-size--2xs);
+	font-weight: var(--font-weight--medium);
+	line-height: var(--line-height--sm);
+	white-space: nowrap;
 }
 
 .statusIcons {

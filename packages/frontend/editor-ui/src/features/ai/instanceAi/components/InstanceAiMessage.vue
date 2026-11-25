@@ -185,7 +185,8 @@ function formatJson(value: unknown): string {
 	>
 		<!-- User message -->
 		<template v-if="isUser">
-			{{ props.message.content }}
+			<!-- No text node for an empty message: the bubble keeps white space, so it would add a line. -->
+			<template v-if="props.message.content">{{ props.message.content }}</template>
 			<div
 				v-if="attachments.length > 0"
 				:class="[

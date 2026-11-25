@@ -5,6 +5,7 @@ import { N8nAttachment, type IconName } from '@n8n/design-system';
 import { computed } from 'vue';
 import { elementAttachmentLabel } from '../utils/elementAttachment';
 import NodesAttachmentChips from './NodesAttachmentChips.vue';
+import CapabilityChip from '../capabilityPrototype/CapabilityChip.vue';
 
 const props = defineProps<{
 	file?: File;
@@ -51,6 +52,12 @@ const resourceCard = computed((): { name: string; icon: IconName; testId: string
 			return undefined;
 	}
 });
+// Prototype: a capability chip rides on the agent attachment type.
+const capabilityAttachment = computed(() =>
+	props.attachment?.type === 'agent' && props.attachment.id.startsWith('capability:')
+		? props.attachment
+		: undefined,
+);
 const fileAttachment = computed(() =>
 	props.attachment?.type === 'file' ? props.attachment : undefined,
 );
@@ -70,6 +77,13 @@ const thumbnailSrc = computed(() => {
 		:is-removable="isRemovable ?? false"
 		@update:attachment="emit('update:attachment', $event)"
 		@remove-all="emit('remove-resource')"
+	/>
+	<CapabilityChip
+		v-else-if="capabilityAttachment"
+		:capability-id="capabilityAttachment.id"
+		:fallback-name="capabilityAttachment.name"
+		:action="isRemovable ? 'remove' : undefined"
+		@remove="emit('remove-resource')"
 	/>
 	<N8nAttachment
 		v-else-if="resourceCard"
