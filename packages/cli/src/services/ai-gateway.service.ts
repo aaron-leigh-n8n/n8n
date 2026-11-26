@@ -463,7 +463,16 @@ export class AiGatewayService {
 	}
 
 	private parseWalletResponse(data: unknown): AiGatewayWalletResponse {
-		const d = data as { budget?: unknown; balance?: unknown; hasEverToppedUp?: unknown };
+		const d = data as {
+			budget?: unknown;
+			balance?: unknown;
+			hasEverToppedUp?: unknown;
+			premiumModelsLocked?: unknown;
+			requestCostLimit?: unknown;
+			pendingBalance?: unknown;
+			releaseAmount?: unknown;
+			nextReleaseAt?: unknown;
+		};
 		if (typeof d.budget !== 'number' || typeof d.balance !== 'number') {
 			throw new UserError('Gateway credits returned an invalid wallet response.');
 		}
@@ -471,6 +480,11 @@ export class AiGatewayService {
 			budget: d.budget,
 			balance: d.balance,
 			hasEverToppedUp: d.hasEverToppedUp === true,
+			premiumModelsLocked: d.premiumModelsLocked === true,
+			...(typeof d.requestCostLimit === 'number' ? { requestCostLimit: d.requestCostLimit } : {}),
+			...(typeof d.pendingBalance === 'number' ? { pendingBalance: d.pendingBalance } : {}),
+			...(typeof d.releaseAmount === 'number' ? { releaseAmount: d.releaseAmount } : {}),
+			...(typeof d.nextReleaseAt === 'string' ? { nextReleaseAt: d.nextReleaseAt } : {}),
 		};
 	}
 

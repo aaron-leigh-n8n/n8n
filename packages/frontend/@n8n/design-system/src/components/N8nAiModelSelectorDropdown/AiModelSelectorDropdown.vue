@@ -201,7 +201,11 @@ defineExpose({
 			</template>
 			<div v-else :class="[$style.labelWithBadge, ui.class]">
 				<span v-if="item.data?.loading" :class="$style.modelLoading" aria-hidden="true"></span>
-				<N8nText v-else size="medium" :color="item.disabled ? 'text-xlight' : 'text-dark'">
+				<N8nText
+					v-else
+					size="medium"
+					:color="item.disabled ? 'text-xlight' : item.data?.locked ? 'text-light' : 'text-dark'"
+				>
 					{{ item.label }}
 				</N8nText>
 				<N8nBadge
@@ -216,7 +220,7 @@ defineExpose({
 					v-if="item.data?.actionPill"
 					size="xxsmall"
 					:variant="
-						item.data.actionPill.type === 'danger' || item.data.actionPill.type === 'info'
+						item.data.actionPill.type && item.data.actionPill.type !== 'default'
 							? item.data.actionPill.type
 							: 'success'
 					"

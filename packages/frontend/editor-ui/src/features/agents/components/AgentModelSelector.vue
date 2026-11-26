@@ -15,6 +15,9 @@ import { useProjectsStore } from '@/features/collaboration/projects/projects.sto
 import { useUIStore } from '@/app/stores/ui.store';
 import { useFreeAiCredits } from '@/app/composables/useFreeAiCredits';
 import { useAiGateway } from '@/app/composables/useAiGateway';
+import { useAiGatewayStore } from '@/app/stores/aiGateway.store';
+import { useAiGatewayBalancePill } from '@/app/composables/useAiGatewayBalancePill';
+import { usePremiumModelsUpgrade } from '@/app/composables/usePremiumModelsUpgrade';
 import {
 	AI_GATEWAY_MANAGED_TAG,
 	type AgentModelsUnavailableReason,
@@ -132,6 +135,13 @@ const projectsStore = useProjectsStore();
 const uiStore = useUIStore();
 const { credentialTypeRestriction } = useTypeAvailability(() => projectId);
 const aiGateway = useAiGateway();
+const aiGatewayStore = useAiGatewayStore();
+const { openPremiumModelsUpgrade } = usePremiumModelsUpgrade();
+
+// Premium models are locked only for a provider that runs on Gateway credits.
+function isModelLocked(provider: AgentModelProvider, model: string): boolean {
+	return credentials?.[provider] === AI_GATEWAY_MANAGED_TAG && aiGatewayStore.isModelLocked(model);
+}
 const { ensureLoaded, getDefaultModelForPicker, getVerificationStatus } = useModelCatalog();
 const pendingDefaultCredential = ref<{
 	provider: AgentModelProvider;
@@ -143,19 +153,7 @@ const isResolvingDefaultModel = computed(
 	() => pendingDefaultCredential.value !== null || forceModelOptionsDisabled.value,
 );
 
-const aiGatewayBalancePill = computed(() => {
-	const balance = aiGateway.balance.value;
-	if (balance === undefined) return undefined;
-	const depleted = balance <= 0;
-	return {
-		text: depleted
-			? i18n.baseText('aiGateway.wallet.noCredits')
-			: i18n.baseText('aiGateway.wallet.balanceRemaining', {
-					interpolate: { balance: `$${Number(balance).toFixed(2)}` },
-				}),
-		type: depleted ? ('danger' as const) : ('default' as const),
-	};
-});
+const { pill: aiGatewayBalancePill, trialHint: aiGatewayTrialHint } = useAiGatewayBalancePill();
 
 onMounted(() => {
 	// Load the gateway config so `isCredentialTypeSupported` can gate the managed
@@ -372,6 +370,10 @@ function providerToMenuItem(provider: AgentModelProvider): MenuItem {
 					data: {
 						provider,
 						actionPill: aiGatewayBalancePill.value,
+						// The row shows the trial terms on hover: daily credits and the request limit.
+						...(aiGatewayTrialHint.value
+							? { description: aiGatewayTrialHint.value, descriptionTooltipTeleported: false }
+							: {}),
 					},
 				},
 			]
@@ -401,20 +403,23 @@ function providerToMenuItem(provider: AgentModelProvider): MenuItem {
 			: [];
 
 	const modelItems = hasProviderCredential
-		? models.map<MenuItem>((model) => ({
-				id: buildMenuItemId(provider, 'model', model.model),
-				label: truncateBeforeLast(model.name, MAX_MODEL_NAME_CHARS),
-				disabled: isResolvingDefaultModel.value,
-				checked: selectedModel?.provider === provider && selectedModel.model === model.model,
-				data: {
-					provider,
-					loading: isResolvingDefaultModel.value,
-					description: model.description ?? undefined,
-					descriptionTooltipTeleported: false,
-					fullName: `${model.name} ${model.model}`,
-					credentialType: credentialTypes[0],
-				},
-			}))
+		? models
+				// A premium model is not offered while the provider runs on Gateway credits.
+				.filter((model) => !isModelLocked(provider, model.model))
+				.map<MenuItem>((model) => ({
+					id: buildMenuItemId(provider, 'model', model.model),
+					label: truncateBeforeLast(model.name, MAX_MODEL_NAME_CHARS),
+					disabled: isResolvingDefaultModel.value,
+					checked: selectedModel?.provider === provider && selectedModel.model === model.model,
+					data: {
+						provider,
+						loading: isResolvingDefaultModel.value,
+						description: model.description ?? undefined,
+						descriptionTooltipTeleported: false,
+						fullName: `${model.name} ${model.model}`,
+						credentialType: credentialTypes[0],
+					},
+				}))
 		: [];
 
 	const statusItems: MenuItem[] = !hasProviderCredential
@@ -650,12 +655,20 @@ function handleDefaultModelResolution(result: ReturnType<typeof getPendingDefaul
 	}
 
 	pendingDefaultCredential.value = null;
-	if (result.status === 'resolved' && result.defaultModel) {
+	const { provider, credentialId } = result.pending;
+	const isAvailable = (model: string) =>
+		credentialId !== AI_GATEWAY_MANAGED_TAG || !aiGatewayStore.isModelLocked(model);
+	// Gateway credits does not offer premium models, so use the first model that it offers.
+	const defaultModel =
+		result.defaultModel && isAvailable(result.defaultModel.model)
+			? result.defaultModel
+			: modelsByProvider[provider]?.models.find((model) => isAvailable(model.model));
+	if (result.status === 'resolved' && defaultModel) {
 		emit(
 			'change',
 			{
-				provider: result.defaultModel.provider,
-				model: result.defaultModel.model,
+				provider: defaultModel.provider,
+				model: defaultModel.model,
 			},
 			'auto',
 		);
@@ -739,6 +752,10 @@ async function onSelect(id: string) {
 	}
 
 	if (action === 'model') {
+		if (isModelLocked(providerId, value)) {
+			openPremiumModelsUpgrade();
+			return;
+		}
 		pendingDefaultCredential.value = null;
 		emit('change', { provider: providerId, model: value });
 	}

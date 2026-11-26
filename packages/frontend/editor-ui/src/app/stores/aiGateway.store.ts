@@ -78,6 +78,22 @@ export function usesFreeCreditsLabel(
 	return hasEverToppedUp !== true && (balance === undefined || balance > 0);
 }
 
+// Google model ids carry a `models/` prefix in node parameters; the gateway lists bare ids.
+const toGatewayModelId = (model: string) => model.replace(/^models\//, '');
+
+/** Reads the selected model of a node. Model nodes store it as `modelId`, `model` or `modelName`. */
+function getNodeModelId(node: Pick<INode, 'parameters'>): string | undefined {
+	for (const name of ['modelId', 'model', 'modelName']) {
+		const parameter = node.parameters?.[name];
+		if (typeof parameter === 'string' && parameter !== '') return parameter;
+		if (parameter !== null && typeof parameter === 'object' && 'value' in parameter) {
+			const { value } = parameter;
+			if (typeof value === 'string' && value !== '') return value;
+		}
+	}
+	return undefined;
+}
+
 export const useAiGatewayStore = defineStore(STORES.AI_GATEWAY, () => {
 	const rootStore = useRootStore();
 
@@ -85,6 +101,22 @@ export const useAiGatewayStore = defineStore(STORES.AI_GATEWAY, () => {
 	const balance = ref<number | undefined>(undefined);
 	const budget = ref<number | undefined>(undefined);
 	const hasEverToppedUp = ref<boolean | undefined>(undefined);
+	const premiumModelsLocked = ref(false);
+	/** The most one request can cost in USD on the account's plan. */
+	const requestCostLimit = ref<number | undefined>(undefined);
+	const requestCostLimitLabel = computed(() =>
+		requestCostLimit.value === undefined ? undefined : `$${requestCostLimit.value.toFixed(2)}`,
+	);
+	/** Credits in USD that the plan releases later. `balance` does not include them. */
+	const pendingBalance = ref<number | undefined>(undefined);
+	/** The credits in USD that the next release adds. */
+	const releaseAmount = ref<number | undefined>(undefined);
+	/** ISO 8601 time of the next release. */
+	const nextReleaseAt = ref<string | undefined>(undefined);
+	/** The balance is used, but the plan releases more credits later. */
+	const isWaitingForCredits = computed(
+		() => balance.value !== undefined && balance.value <= 0 && (pendingBalance.value ?? 0) > 0,
+	);
 	const creditsLabelKey = computed((): 'generic.freeCredits' | 'generic.n8nCredits' =>
 		usesFreeCreditsLabel(hasEverToppedUp.value, balance.value)
 			? 'generic.freeCredits'
@@ -123,6 +155,11 @@ export const useAiGatewayStore = defineStore(STORES.AI_GATEWAY, () => {
 			balance.value = data.balance;
 			budget.value = data.budget;
 			hasEverToppedUp.value = data.hasEverToppedUp;
+			premiumModelsLocked.value = data.premiumModelsLocked === true;
+			requestCostLimit.value = data.requestCostLimit;
+			pendingBalance.value = data.pendingBalance;
+			releaseAmount.value = data.releaseAmount;
+			nextReleaseAt.value = data.nextReleaseAt;
 			fetchError.value = null;
 		} catch (error) {
 			fetchError.value = toError(error);
@@ -242,6 +279,19 @@ export const useAiGatewayStore = defineStore(STORES.AI_GATEWAY, () => {
 		return operation !== undefined && supportedActions[resource]?.includes(operation) === true;
 	}
 
+	/** Whether Gateway credits cannot run this model on the account's current plan. */
+	function isModelLocked(model: string | undefined): boolean {
+		if (!premiumModelsLocked.value || !model) return false;
+		return config.value?.premiumModels?.includes(toGatewayModelId(model)) ?? false;
+	}
+
+	/** Returns the node's model when the node uses Gateway credits and the model is locked. */
+	function getLockedModel(node: INode | null): string | undefined {
+		if (!hasGatewayManagedCredential(node)) return undefined;
+		const model = getNodeModelId(node);
+		return isModelLocked(model) ? model : undefined;
+	}
+
 	function hasGatewayManagedCredential(node: INode | null): node is INode {
 		if (!node?.credentials) return false;
 		return Object.values(node.credentials).some((cred) => cred.__aiGatewayManaged === true);
@@ -292,6 +342,12 @@ export const useAiGatewayStore = defineStore(STORES.AI_GATEWAY, () => {
 		balance,
 		budget,
 		hasEverToppedUp,
+		premiumModelsLocked,
+		requestCostLimitLabel,
+		pendingBalance,
+		releaseAmount,
+		nextReleaseAt,
+		isWaitingForCredits,
 		creditsLabelKey,
 		usageEntries,
 		usageTotal,
@@ -309,5 +365,7 @@ export const useAiGatewayStore = defineStore(STORES.AI_GATEWAY, () => {
 		isActionOptionVisible,
 		isNodePropertyHidden,
 		hasGatewayManagedCredential,
+		isModelLocked,
+		getLockedModel,
 	};
 });

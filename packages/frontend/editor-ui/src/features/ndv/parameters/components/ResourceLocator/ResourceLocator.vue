@@ -13,6 +13,8 @@ import { injectNDVStore } from '@/features/ndv/shared/ndv.store';
 import { useNodeTypesStore } from '@/app/stores/nodeTypes.store';
 import { useRootStore } from '@n8n/stores/useRootStore';
 import { useUIStore } from '@/app/stores/ui.store';
+import { useAiGatewayStore } from '@/app/stores/aiGateway.store';
+import PremiumModelNotice from '@/features/ai/gateway/components/PremiumModelNotice.vue';
 import {
 	getAppNameFromNodeName,
 	getMainAuthField,
@@ -383,15 +385,35 @@ const currentRequestKey = computed(() => {
 
 const currentResponse = computed(() => cachedResponses.value[currentRequestKey.value] ?? null);
 
+const aiGatewayStore = useAiGatewayStore();
+
+// Premium models are left out of the list only while the node runs on Gateway credits.
+const usesGatewayCredits = computed(() =>
+	aiGatewayStore.hasGatewayManagedCredential(props.node ?? null),
+);
+
+const isLockedValue = (value: unknown): boolean =>
+	usesGatewayCredits.value && typeof value === 'string' && aiGatewayStore.isModelLocked(value);
+
+// The list leaves out premium models, so the notice says why some models are missing.
+const showPremiumModelNotice = computed(
+	() =>
+		usesGatewayCredits.value &&
+		aiGatewayStore.premiumModelsLocked &&
+		['model', 'modelName', 'modelId'].includes(props.parameter.name),
+);
+
 const currentQueryResults = computed<IResourceLocatorResultExpanded[]>(() => {
 	const results = currentResponse.value?.results ?? [];
 
-	return results.map(
-		(result: INodeListSearchItems): IResourceLocatorResultExpanded => ({
-			...result,
-			...(result.name && result.url ? { linkAlt: getLinkAlt(result.name) } : {}),
-		}),
-	);
+	return results
+		.filter((result: INodeListSearchItems) => !isLockedValue(result.value))
+		.map(
+			(result: INodeListSearchItems): IResourceLocatorResultExpanded => ({
+				...result,
+				...(result.name && result.url ? { linkAlt: getLinkAlt(result.name) } : {}),
+			}),
+		);
 });
 
 const currentQueryHasMore = computed(() => !!currentResponse.value?.nextPageToken);
@@ -1064,6 +1086,10 @@ function showResourceDropdown() {
 	resourceDropdownVisible.value = true;
 }
 
+function onUseOwnCredential() {
+	if (props.node) ndvEventBus.emit('credential.useOwn', { nodeName: props.node.name });
+}
+
 function onListItemSelected(value: INodeParameterResourceLocator['value']) {
 	onInputChange(value);
 	hideResourceDropdown();
@@ -1323,6 +1349,11 @@ function removeOverride() {
 				</div>
 			</div>
 		</ResourceLocatorDropdown>
+		<PremiumModelNotice
+			v-if="showPremiumModelNotice"
+			can-use-own-credential
+			@use-own-credential="onUseOwnCredential"
+		/>
 		<ParameterOverrideSelectableList
 			v-if="isContentOverride && fromAIOverride"
 			v-model="fromAIOverride"

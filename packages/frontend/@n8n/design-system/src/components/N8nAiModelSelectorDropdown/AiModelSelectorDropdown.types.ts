@@ -3,7 +3,9 @@ import type { DropdownMenuItemProps } from '../N8nDropdownMenu/DropdownMenu.type
 export interface AiModelSelectorMenuItemData {
 	badgeLabel?: string;
 	/** Right-aligned action pill on the item (e.g. an n8n credits balance). */
-	actionPill?: { text: string; type?: 'default' | 'danger' | 'info' };
+	actionPill?: { text: string; type?: 'default' | 'danger' | 'info' | 'outline' };
+	/** The plan does not include this item. The label is dimmed, and the item stays clickable. */
+	locked?: boolean;
 	description?: string;
 	descriptionTooltipTeleported?: boolean;
 	fullName?: string;

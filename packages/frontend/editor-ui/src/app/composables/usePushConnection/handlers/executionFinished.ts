@@ -21,6 +21,7 @@ import {
 } from '@/app/stores/workflowDocument.store';
 import { useWorkflowExecutionStateStore } from '@/app/stores/workflowExecutionState.store';
 import { useAiGatewayStore } from '@/app/stores/aiGateway.store';
+import { useGatewayRejectionToast } from '@/app/composables/useGatewayRejectionToast';
 import { createExecutionDataId, useExecutionDataStore } from '@/app/stores/executionData.store';
 import { useWorkflowsListStore } from '@/app/stores/workflowsList.store';
 import { useBuilderStore } from '@/features/ai/assistant/builder.store';
@@ -455,9 +456,15 @@ export function handleExecutionFinishedWithErrorOrCanceled(
 			if (violations) {
 				showPolicyViolationToast(violations, policyTitle, 'execute', documentId);
 			} else {
+				// A Gateway credits plan limit has its own text. The toast behaves as any run error.
+				const rejectionToast = useGatewayRejectionToast().getRejectionToast(
+					execution.data.resultData.error,
+					execution.data.resultData.lastNodeExecuted,
+					documentId,
+				);
 				toast.showMessage({
-					title,
-					message,
+					title: rejectionToast?.title ?? title,
+					message: rejectionToast?.message ?? message,
 					type: 'error',
 					duration: 0,
 					customClass: WORKFLOW_ERROR_NUDGE_TOAST_CUSTOM_CLASS,

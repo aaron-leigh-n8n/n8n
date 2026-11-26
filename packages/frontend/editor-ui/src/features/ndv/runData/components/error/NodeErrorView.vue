@@ -28,6 +28,9 @@ import { useChatPanelStore } from '@/features/ai/assistant/chatPanel.store';
 import { useAssistantStore } from '@/features/ai/assistant/assistant.store';
 import type { ChatRequest } from '@/features/ai/assistant/assistant.types';
 import { useUIStore } from '@/app/stores/ui.store';
+import { usePremiumModelsUpgrade } from '@/app/composables/usePremiumModelsUpgrade';
+import { getGatewayRejection } from '@/features/ai/gateway/gatewayRejection';
+import { useGatewayRejectionCopy } from '@/app/composables/useGatewayRejectionCopy';
 import { useAIAssistantHelpers } from '@/features/ai/assistant/composables/useAIAssistantHelpers';
 import {
 	N8nInlineAskAssistantButton,
@@ -51,6 +54,8 @@ const clipboard = useClipboard();
 const toast = useToast();
 const i18n = useI18n();
 const assistantHelpers = useAIAssistantHelpers();
+const { openUpgradeForRejection } = usePremiumModelsUpgrade();
+const { describeRejection } = useGatewayRejectionCopy();
 
 const workflowId = useInjectWorkflowId();
 const nodeTypesStore = useNodeTypesStore();
@@ -244,7 +249,16 @@ function addItemIndexSuffix(message: string): string {
 	return `${message} [${itemIndexSuffix}]`;
 }
 
+// A node shows a generic 403 title for a Gateway credits plan limit. Name the real reason.
+const gatewayRejection = computed(() => getGatewayRejection(props.error));
+
+const gatewayRejectionCopy = computed(() =>
+	gatewayRejection.value ? describeRejection(gatewayRejection.value) : undefined,
+);
+
 function getErrorMessage(): string {
+	if (gatewayRejectionCopy.value) return gatewayRejectionCopy.value.title;
+
 	let message = '';
 
 	const isNonEmptyString = (value?: unknown): value is string =>
@@ -501,12 +515,28 @@ async function onInstanceAiHandoffClick() {
 				</div>
 			</div>
 			<div
-				v-if="(error.description || error.context?.descriptionKey) && !isSubNodeError"
+				v-if="gatewayRejectionCopy"
+				data-test-id="node-error-description"
+				class="node-error-view__header-description"
+			>
+				{{ gatewayRejectionCopy.message }}
+			</div>
+			<div
+				v-else-if="(error.description || error.context?.descriptionKey) && !isSubNodeError"
 				v-n8n-html="getErrorDescription()"
 				data-test-id="node-error-description"
 				class="node-error-view__header-description"
 			></div>
 
+			<div v-if="gatewayRejection">
+				<N8nButton
+					variant="outline"
+					:label="i18n.baseText('generic.upgrade')"
+					class="node-error-view__button"
+					data-test-id="node-error-view-upgrade-button"
+					@click="openUpgradeForRejection(gatewayRejection.type)"
+				/>
+			</div>
 			<div v-if="isSubNodeError">
 				<N8nButton
 					variant="outline"

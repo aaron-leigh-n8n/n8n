@@ -83,6 +83,10 @@ import {
 
 import { getDebounceTime, useDebounce } from '@n8n/composables/useDebounce';
 import { useAiGateway } from '@/app/composables/useAiGateway';
+import { ndvEventBus } from '@/features/ndv/shared/ndv.eventBus';
+import { useAiGatewayStore } from '@/app/stores/aiGateway.store';
+import { usePremiumModelsUpgrade } from '@/app/composables/usePremiumModelsUpgrade';
+import PremiumModelNotice from '@/features/ai/gateway/components/PremiumModelNotice.vue';
 import { useExternalHooks } from '@/app/composables/useExternalHooks';
 import { useI18n } from '@n8n/i18n';
 import { useNodeHelpers } from '@/app/composables/useNodeHelpers';
@@ -119,6 +123,7 @@ import { useBuilderStore } from '@/features/ai/assistant/builder.store';
 
 import { ElColorPicker, ElDatePicker } from 'element-plus';
 import {
+	N8nBadge,
 	N8nDialog,
 	N8nDialogBody,
 	N8nIcon,
@@ -205,6 +210,8 @@ const workflowsListStore = useWorkflowsListStore();
 const workflowDocumentStore = injectWorkflowDocumentStore();
 const settingsStore = useSettingsStore();
 const aiGateway = useAiGateway();
+const aiGatewayStore = useAiGatewayStore();
+const { openPremiumModelsUpgrade } = usePremiumModelsUpgrade();
 const nodeTypesStore = useNodeTypesStore();
 const uiStore = useUIStore();
 const focusPanelStore = useFocusPanelStore();
@@ -889,6 +896,42 @@ function isRemoteParameterOption(option: INodePropertyOptions) {
 	return remoteParameterOptionsKeys.value.includes(option.name);
 }
 
+const MODEL_PARAMETER_NAMES = ['model', 'modelName', 'modelId'];
+
+// A model option the account's plan cannot use with Gateway credits. The list leaves it out.
+function isOptionLocked(option: INodePropertyOptions): boolean {
+	return (
+		MODEL_PARAMETER_NAMES.includes(props.parameter.name) &&
+		typeof option.value === 'string' &&
+		aiGatewayStore.hasGatewayManagedCredential(node.value ?? null) &&
+		aiGatewayStore.isModelLocked(option.value)
+	);
+}
+
+const visibleParameterOptions = computed(() =>
+	searchedParameterOptions.value.filter((option) => !isOptionLocked(option)),
+);
+
+// The list leaves out premium models, so the notice says why some models are missing.
+const showPremiumModelNotice = computed(
+	() =>
+		props.parameter.type === 'options' &&
+		MODEL_PARAMETER_NAMES.includes(props.parameter.name) &&
+		aiGatewayStore.premiumModelsLocked &&
+		aiGatewayStore.hasGatewayManagedCredential(node.value ?? null),
+);
+
+const isSelectedOptionLocked = computed(
+	() =>
+		props.parameter.type === 'options' &&
+		typeof props.modelValue === 'string' &&
+		isOptionLocked({ name: props.modelValue, value: props.modelValue }),
+);
+
+function onUseOwnCredential() {
+	if (node.value) ndvEventBus.emit('credential.useOwn', { nodeName: node.value.name });
+}
+
 function isOptionDisabled(option: INodePropertyOptions) {
 	return 'disabled' in option && option.disabled === true;
 }
@@ -1166,6 +1209,17 @@ function trackWorkflowInputModeEvent(value: string) {
 
 function valueChanged(untypedValue: unknown) {
 	if (remoteParameterOptionsLoading.value) {
+		return;
+	}
+
+	// A locked model is not selected. The click asks the user to upgrade.
+	if (
+		props.parameter.type === 'options' &&
+		typeof untypedValue === 'string' &&
+		untypedValue !== props.modelValue &&
+		isOptionLocked({ name: untypedValue, value: untypedValue })
+	) {
+		openPremiumModelsUpgrade();
 		return;
 	}
 
@@ -1500,7 +1554,7 @@ watch(
 			return;
 		}
 		const stillValid = remoteParameterOptions.value.some(
-			(option) => option.value === props.modelValue,
+			(option) => option.value === props.modelValue && !isOptionLocked(option),
 		);
 		if (!stillValid) {
 			emit('update', {
@@ -2138,7 +2192,7 @@ onUpdated(async () => {
 				@visible-change="onOptionsVisibleChange"
 			>
 				<N8nOption
-					v-for="option in searchedParameterOptions"
+					v-for="option in visibleParameterOptions"
 					:key="option.value.toString()"
 					:value="option.value"
 					:disabled="isOptionDisabled(option)"
@@ -2151,6 +2205,14 @@ onUpdated(async () => {
 							:class="{ 'remote-parameter-option': isRemoteParameterOption(option) }"
 						>
 							{{ getOptionsOptionDisplayName(option) }}
+							<N8nBadge
+								v-if="isOptionLocked(option)"
+								class="ml-3xs"
+								variant="outline"
+								data-test-id="parameter-input-item-locked-badge"
+							>
+								{{ i18n.baseText('generic.upgrade') }}
+							</N8nBadge>
 						</div>
 						<div
 							v-if="option.description"
@@ -2160,6 +2222,11 @@ onUpdated(async () => {
 					</div>
 				</N8nOption>
 			</N8nSelect>
+			<PremiumModelNotice
+				v-if="showPremiumModelNotice"
+				can-use-own-credential
+				@use-own-credential="onUseOwnCredential"
+			/>
 
 			<N8nSelect
 				v-else-if="parameter.type === 'multiOptions'"

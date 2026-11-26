@@ -11,6 +11,12 @@ export type AiGatewayTopUpSource = 'settings_page' | 'credential_selector' | 'ag
 
 export type AiGatewayTopUpVariant = 'member' | 'memberTrial' | 'ownerTrial';
 
+/**
+ * Why the upgrade modal opened: to top up credits, to unlock premium models,
+ * to remove the cost limit for each request, or to stop waiting for daily credits.
+ */
+export type AiGatewayUpgradeReason = 'topUp' | 'premiumModels' | 'requestLimit' | 'creditRelease';
+
 export function useAiGatewayTopUp() {
 	const uiStore = useUIStore();
 	const usersStore = useUsersStore();

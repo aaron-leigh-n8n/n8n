@@ -85,6 +85,10 @@ import {
 	getCredentialTypeRestriction,
 } from '@n8n/frontend-module-type-availability-policies';
 import { useAiGateway } from '@/app/composables/useAiGateway';
+import {
+	useAiGatewayBalancePill,
+	type AiGatewayBalancePill,
+} from '@/app/composables/useAiGatewayBalancePill';
 import { useContactAdminDialog } from '../composables/useContactAdminDialog';
 import { useAiGatewayTopUp } from '@/app/composables/useAiGatewayTopUp';
 
@@ -221,19 +225,14 @@ const { canOAuthCredentialQuickConnect, hasManualCredentialInputFields, authoriz
 const aiGateway = useAiGateway();
 const { openTopUp } = useAiGatewayTopUp();
 
-const balancePill = computed(() => {
-	const balance = aiGateway.balance.value;
-	if (balance === undefined) return undefined;
-	const depleted = balance <= 0;
-	return {
-		text: depleted
-			? i18n.baseText('aiGateway.wallet.noCredits')
-			: i18n.baseText('aiGateway.wallet.balanceRemaining', {
-					interpolate: { balance: `$${Number(balance).toFixed(2)}` },
-				}),
-		type: depleted ? ('danger' as const) : ('default' as const),
-	};
-});
+// The Gateway credits row shows the trial terms on hover: daily credits and the request limit.
+const { pill: balancePill, trialHint: requestLimitHint } = useAiGatewayBalancePill();
+
+// Neutral while a trial waits for its next credits, red only when no more credits will come.
+function balancePillVariant(type: AiGatewayBalancePill['type'] | undefined) {
+	if (type === 'danger') return 'danger';
+	return type === 'info' ? 'secondary' : 'success';
+}
 
 function entryPlaceholder(credentialType: string): string {
 	return i18n.baseText('nodeCredentials.quickConnect.connectTo', {
@@ -748,6 +747,7 @@ onMounted(() => {
 	});
 
 	ndvEventBus.on('credential.createNew', onCreateAndAssignNewCredential);
+	ndvEventBus.on('credential.useOwn', onUseOwnCredential);
 
 	void aiGateway.fetchConfig();
 	void aiGateway.fetchWallet();
@@ -770,6 +770,7 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
 	ndvEventBus.off('credential.createNew', onCreateAndAssignNewCredential);
+	ndvEventBus.off('credential.useOwn', onUseOwnCredential);
 	cancelConnect();
 });
 
@@ -1169,6 +1170,14 @@ function onAiGatewaySelector(credentialType: string, enable: boolean, isUserActi
 		properties: { credentials },
 	});
 	if (!props.standalone) void aiGateway.saveAfterToggle();
+}
+
+// Leaves Gateway credits on this node: restores the user's latest credential, or clears the slot.
+function onUseOwnCredential({ nodeName }: { nodeName: string }): void {
+	if (nodeName !== props.node.name) return;
+	for (const [credentialType, credential] of Object.entries(props.node.credentials ?? {})) {
+		if (credential.__aiGatewayManaged) onAiGatewaySelector(credentialType, false);
+	}
 }
 
 function getIssues(credentialTypeName: string): string[] {
@@ -1674,7 +1683,7 @@ async function onQuickConnectSignIn(credentialTypeName: string) {
 							<N8nBadge
 								v-if="balancePill"
 								size="xxsmall"
-								:variant="balancePill.type === 'danger' ? 'danger' : 'success'"
+								:variant="balancePillVariant(balancePill.type)"
 								:class="$style.aiGatewayOnlyPill"
 							>
 								{{ balancePill.text }}
@@ -1771,7 +1780,7 @@ async function onQuickConnectSignIn(credentialTypeName: string) {
 								<N8nBadge
 									v-if="balancePill"
 									size="xxsmall"
-									:variant="balancePill.type === 'danger' ? 'danger' : 'success'"
+									:variant="balancePillVariant(balancePill.type)"
 									:class="$style.entryPill"
 								>
 									{{ balancePill.text }}
@@ -1878,10 +1887,18 @@ async function onQuickConnectSignIn(credentialTypeName: string) {
 									<N8nBadge
 										v-if="balancePill"
 										size="xxsmall"
-										:variant="balancePill.type === 'danger' ? 'danger' : 'success'"
+										:variant="balancePillVariant(balancePill.type)"
 									>
 										{{ balancePill.text }}
 									</N8nBadge>
+									<N8nTooltip v-if="requestLimitHint" :content="requestLimitHint" placement="right">
+										<N8nIcon
+											icon="info"
+											size="medium"
+											color="text-light"
+											data-test-id="node-credentials-trial-hint"
+										/>
+									</N8nTooltip>
 									<N8nIcon
 										v-if="isAiGatewayManagedCredentials(type.name)"
 										icon="check"
@@ -2035,10 +2052,7 @@ async function onQuickConnectSignIn(credentialTypeName: string) {
 							<span :class="$style.balanceLabelSizer" aria-hidden="true">{{
 								N8N_CREDITS_LABEL
 							}}</span>
-							<N8nBadge
-								size="xxsmall"
-								:variant="balancePill?.type === 'danger' ? 'danger' : 'success'"
-							>
+							<N8nBadge size="xxsmall" :variant="balancePillVariant(balancePill?.type)">
 								{{ balancePill?.text }}
 							</N8nBadge>
 						</div>

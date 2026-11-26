@@ -14,6 +14,11 @@ export function useAiGateway() {
 	const balance = computed(() => aiGatewayStore.balance);
 	const budget = computed(() => aiGatewayStore.budget);
 	const creditsLabelKey = computed(() => aiGatewayStore.creditsLabelKey);
+	const requestCostLimitLabel = computed(() => aiGatewayStore.requestCostLimitLabel);
+	const pendingBalance = computed(() => aiGatewayStore.pendingBalance);
+	const releaseAmount = computed(() => aiGatewayStore.releaseAmount);
+	const nextReleaseAt = computed(() => aiGatewayStore.nextReleaseAt);
+	const isWaitingForCredits = computed(() => aiGatewayStore.isWaitingForCredits);
 	const fetchError = computed(() => aiGatewayStore.fetchError);
 
 	const isEnabled = computed(() => settingsStore.isAiGatewayEnabled);
@@ -61,6 +66,11 @@ export function useAiGateway() {
 		balance,
 		budget,
 		creditsLabelKey,
+		requestCostLimitLabel,
+		pendingBalance,
+		releaseAmount,
+		nextReleaseAt,
+		isWaitingForCredits,
 		fetchError,
 		fetchConfig,
 		fetchWallet,

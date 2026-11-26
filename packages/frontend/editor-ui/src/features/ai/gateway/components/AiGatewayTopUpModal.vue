@@ -5,9 +5,13 @@ import { N8nAlertDialog, N8nText } from '@n8n/design-system';
 import { useI18n, type BaseTextKey } from '@n8n/i18n';
 import { useUsersStore } from '@n8n/stores/users.store';
 import { AI_GATEWAY_TOP_UP_MODAL_KEY } from '@/app/constants';
-import type { AiGatewayTopUpVariant } from '@/app/composables/useAiGatewayTopUp';
+import type {
+	AiGatewayTopUpVariant,
+	AiGatewayUpgradeReason,
+} from '@/app/composables/useAiGatewayTopUp';
 import { usePageRedirectionHelper } from '@/app/composables/usePageRedirectionHelper';
 import { useUIStore } from '@/app/stores/ui.store';
+import { useAiGatewayStore } from '@/app/stores/aiGateway.store';
 import AlibabaLogo from '../assets/service-icons/alibaba.svg?component';
 import AnthropicLogo from '../assets/service-icons/anthropic.svg?component';
 import BraveSearchLogo from '../assets/service-icons/brave-search.svg?component';
@@ -78,9 +82,13 @@ const FEATURED_SERVICES = [
 	logo: Component;
 }>;
 
-const props = defineProps<{
-	variant: AiGatewayTopUpVariant;
-}>();
+const props = withDefaults(
+	defineProps<{
+		variant: AiGatewayTopUpVariant;
+		reason?: AiGatewayUpgradeReason;
+	}>(),
+	{ reason: 'topUp' },
+);
 
 const i18n = useI18n();
 const uiStore = useUIStore();
@@ -92,7 +100,19 @@ const isOwnerTrial = computed(() => props.variant === 'ownerTrial');
 const needsOwnerEmail = computed(
 	() => props.variant === 'member' || props.variant === 'memberTrial',
 );
-const showsServices = computed(() => props.variant !== 'member');
+const aiGatewayStore = useAiGatewayStore();
+const showsServices = computed(() => props.variant !== 'member' && props.reason === 'topUp');
+// The copy for a plan limit depends only on who can upgrade: the owner, or everyone else.
+const audience = computed(() => (isOwnerTrial.value ? 'owner' : 'member'));
+const requestLimitLabel = computed(
+	() =>
+		aiGatewayStore.requestCostLimitLabel ?? i18n.baseText('aiGateway.requestLimit.unknownAmount'),
+);
+const releaseAmountLabel = computed(() =>
+	aiGatewayStore.releaseAmount === undefined
+		? i18n.baseText('aiGateway.requestLimit.unknownAmount')
+		: `$${aiGatewayStore.releaseAmount.toFixed(2)}`,
+);
 const ownerEmails = computed(() =>
 	usersStore.allUsers
 		.filter((user) => user.role === ROLE.Owner)
@@ -112,6 +132,15 @@ onMounted(async () => {
 });
 
 const title = computed(() => {
+	if (props.reason === 'premiumModels') {
+		return i18n.baseText(`aiGateway.premiumModels.modal.title.${audience.value}`);
+	}
+	if (props.reason === 'requestLimit') {
+		return i18n.baseText(`aiGateway.requestLimit.modal.title.${audience.value}`);
+	}
+	if (props.reason === 'creditRelease') {
+		return i18n.baseText(`aiGateway.drip.modal.title.${audience.value}`);
+	}
 	const keys = {
 		ownerTrial: 'aiGateway.topUp.modal.title.trial',
 		memberTrial: 'aiGateway.topUp.modal.title.member',
@@ -121,6 +150,19 @@ const title = computed(() => {
 });
 
 const description = computed(() => {
+	if (props.reason === 'premiumModels') {
+		return i18n.baseText(`aiGateway.premiumModels.modal.description.${audience.value}`);
+	}
+	if (props.reason === 'requestLimit') {
+		return i18n.baseText(`aiGateway.requestLimit.modal.description.${audience.value}`, {
+			interpolate: { limit: requestLimitLabel.value },
+		});
+	}
+	if (props.reason === 'creditRelease') {
+		return i18n.baseText(`aiGateway.drip.modal.description.${audience.value}`, {
+			interpolate: { amount: releaseAmountLabel.value },
+		});
+	}
 	const keys = {
 		ownerTrial: 'aiGateway.topUp.modal.description.trial',
 		memberTrial: 'aiGateway.topUp.modal.description.member.trial',
@@ -144,9 +186,13 @@ function onOpenChange(open: boolean): void {
 }
 
 function ownerMailtoHref(): string {
-	const subject = encodeURIComponent(
-		i18n.baseText('aiGateway.topUp.modal.cta.contactAdmin.subject'),
-	);
+	const subjectKeys = {
+		topUp: 'aiGateway.topUp.modal.cta.contactAdmin.subject',
+		premiumModels: 'aiGateway.premiumModels.modal.cta.contactAdmin.subject',
+		requestLimit: 'aiGateway.requestLimit.modal.cta.contactAdmin.subject',
+		creditRelease: 'aiGateway.drip.modal.cta.contactAdmin.subject',
+	} as const satisfies Record<AiGatewayUpgradeReason, BaseTextKey>;
+	const subject = encodeURIComponent(i18n.baseText(subjectKeys[props.reason]));
 	return ownerEmails.value.length > 0
 		? `mailto:${ownerEmails.value.join(',')}?subject=${subject}`
 		: `mailto:?subject=${subject}`;
@@ -155,6 +201,8 @@ function ownerMailtoHref(): string {
 async function onAction(): Promise<void> {
 	if (isOwnerTrial.value) {
 		close();
+		// Prototype: the upgrade for a plan limit has no destination yet.
+		if (props.reason !== 'topUp') return;
 		await goToUpgrade('ai-gateway-top-up', 'upgrade-ai-gateway-top-up');
 		return;
 	}

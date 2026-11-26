@@ -12,6 +12,9 @@ export interface NdvEventBusEvents {
 	/** Command to let the user create a new credential by opening the credentials modal */
 	'credential.createNew': CreateNewCredentialOpts;
 
+	/** Command to switch the named node from Gateway credits to the user's own credential */
+	'credential.useOwn': { nodeName: string };
+
 	/** Command to set the NDV panels' (input, output, main) positions based on the given value */
 	setPositionByName: Position;
 

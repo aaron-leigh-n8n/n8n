@@ -23,6 +23,7 @@ import type { INodeUi, INodeUpdatePropertiesInformation, IUpdateInformation } fr
 import { AI_GATEWAY_UNSUPPORTED_NODE_TYPES, BUILTIN_CREDENTIALS_DOCS_URL } from '@/app/constants';
 import { useUIStore } from '@/app/stores/ui.store';
 import { useAiGateway } from '@/app/composables/useAiGateway';
+import { useAiGatewayBalancePill } from '@/app/composables/useAiGatewayBalancePill';
 import { useAiGatewayTopUp } from '@/app/composables/useAiGatewayTopUp';
 import { useExternalHooks } from '@/app/composables/useExternalHooks';
 import type { InstanceAiCredentialContext } from '@/app/composables/useInstanceAiEditorCapability';
@@ -294,15 +295,8 @@ const valueLabel = computed(() =>
 			? i18n.baseText('instanceAi.setupPanel.account')
 			: i18n.baseText('instanceAi.setupPanel.credential'),
 );
-const balanceLabel = computed(() =>
-	gateway.balance.value === undefined
-		? ''
-		: gateway.balance.value <= 0
-			? i18n.baseText('aiGateway.wallet.noCredits')
-			: i18n.baseText('aiGateway.wallet.balanceRemaining', {
-					interpolate: { balance: `$${Number(gateway.balance.value).toFixed(2)}` },
-				}),
-);
+const { pill: balancePill } = useAiGatewayBalancePill();
+const balanceLabel = computed(() => balancePill.value?.text ?? '');
 const value = computed(() =>
 	binding.value?.__aiGatewayManaged
 		? [i18n.baseText('generic.n8nCredits'), balanceLabel.value].filter(Boolean).join(' · ')

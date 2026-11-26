@@ -31,6 +31,8 @@ export class AiGatewayConfigDto extends Z.class({
 	supportedActions: z.record(z.record(z.array(z.string()))).optional(),
 	minNodeTypeVersion: z.record(z.number()).optional(),
 	hiddenNodeProperties: z.record(z.array(z.string())).optional(),
+	// Model ids that need a paid plan. The wallet says if they are locked for this account.
+	premiumModels: z.array(z.string()).optional(),
 	// Drop each malformed promotion on its own, so it cannot hide valid promotions
 	// or make the whole config invalid.
 	promotions: z
