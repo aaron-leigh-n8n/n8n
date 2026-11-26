@@ -12,10 +12,6 @@ export interface GatewayRejection {
 	type: GatewayRejectionType;
 	/** The gateway's own explanation. It includes the amounts for a cost limit rejection. */
 	message?: string;
-	/** The estimated cost in USD of a request over the cost limit. */
-	estimatedCost?: number;
-	/** The cost limit in USD for one request. */
-	limit?: number;
 }
 
 const REJECTION_TYPES: readonly string[] = [
@@ -31,13 +27,11 @@ function isRejectionType(value: unknown): value is GatewayRejectionType {
 /** Reads the reason from a gateway response body: `{ error: { type, message } }`. */
 function fromResponseBody(body: unknown): GatewayRejection | undefined {
 	if (!isRecord(body) || !isRecord(body.error)) return undefined;
-	const { type, message, estimatedCost, limit } = body.error;
+	const { type, message } = body.error;
 	if (!isRejectionType(type)) return undefined;
 	return {
 		type,
 		...(typeof message === 'string' ? { message } : {}),
-		...(typeof estimatedCost === 'number' ? { estimatedCost } : {}),
-		...(typeof limit === 'number' ? { limit } : {}),
 	};
 }
 

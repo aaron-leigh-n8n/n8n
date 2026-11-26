@@ -2,8 +2,6 @@ import { useI18n } from '@n8n/i18n';
 import { useAiGatewayStore } from '@/app/stores/aiGateway.store';
 import type { GatewayRejection } from '@/features/ai/gateway/gatewayRejection';
 
-const formatUsd = (amount: number) => `$${amount.toFixed(2)}`;
-
 /**
  * The title and the message for a run that Gateway credits refused for a plan limit.
  * The node panel and the toast show the same text.
@@ -27,21 +25,13 @@ export function useGatewayRejectionCopy() {
 			};
 		}
 
-		const limit =
-			rejection.limit !== undefined
-				? formatUsd(rejection.limit)
-				: (aiGatewayStore.requestCostLimitLabel ??
-					i18n.baseText('aiGateway.requestLimit.unknownAmount'));
+		// The limit comes from the wallet. The gateway's estimate is not shown.
+		const limit = aiGatewayStore.requestCostLimitLabel;
 		return {
 			title: i18n.baseText('aiGateway.requestLimit.error.title'),
-			message:
-				rejection.estimatedCost !== undefined
-					? i18n.baseText('aiGateway.requestLimit.error.message', {
-							interpolate: { estimate: formatUsd(rejection.estimatedCost), limit },
-						})
-					: i18n.baseText('aiGateway.requestLimit.error.message.noEstimate', {
-							interpolate: { limit },
-						}),
+			message: limit
+				? i18n.baseText('aiGateway.requestLimit.error.message', { interpolate: { limit } })
+				: i18n.baseText('aiGateway.requestLimit.error.message.noLimit'),
 		};
 	}
 

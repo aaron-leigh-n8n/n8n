@@ -7,15 +7,6 @@ import { usePremiumModelsUpgrade } from '@/app/composables/usePremiumModelsUpgra
  * Shown under a model field when Gateway credits leaves the premium models out of the list.
  * The notice says why some models are missing and how to get them.
  */
-defineProps<{
-	/** Hides the "use your own credential" action where the host cannot switch credentials. */
-	canUseOwnCredential?: boolean;
-}>();
-
-const emit = defineEmits<{
-	useOwnCredential: [];
-}>();
-
 const i18n = useI18n();
 const { openPremiumModelsUpgrade } = usePremiumModelsUpgrade();
 </script>
@@ -28,16 +19,9 @@ const { openPremiumModelsUpgrade } = usePremiumModelsUpgrade();
 			<N8nLink size="small" data-test-id="premium-model-upgrade" @click="openPremiumModelsUpgrade">
 				{{ i18n.baseText('aiGateway.premiumModels.field.upgrade') }}
 			</N8nLink>
-			<template v-if="canUseOwnCredential">
-				{{ ` ${i18n.baseText('aiGateway.premiumModels.field.or')} ` }}
-				<N8nLink
-					size="small"
-					data-test-id="premium-model-use-own"
-					@click="emit('useOwnCredential')"
-				>
-					{{ i18n.baseText('aiGateway.premiumModels.field.useOwnCredential') }}
-				</N8nLink>
-			</template>
+			{{
+				` ${i18n.baseText('aiGateway.premiumModels.field.or')} ${i18n.baseText('aiGateway.premiumModels.field.useOwnCredential')}`
+			}}
 		</N8nText>
 	</div>
 </template>

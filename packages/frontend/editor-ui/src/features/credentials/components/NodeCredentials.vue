@@ -747,7 +747,6 @@ onMounted(() => {
 	});
 
 	ndvEventBus.on('credential.createNew', onCreateAndAssignNewCredential);
-	ndvEventBus.on('credential.useOwn', onUseOwnCredential);
 
 	void aiGateway.fetchConfig();
 	void aiGateway.fetchWallet();
@@ -770,7 +769,6 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
 	ndvEventBus.off('credential.createNew', onCreateAndAssignNewCredential);
-	ndvEventBus.off('credential.useOwn', onUseOwnCredential);
 	cancelConnect();
 });
 
@@ -1170,14 +1168,6 @@ function onAiGatewaySelector(credentialType: string, enable: boolean, isUserActi
 		properties: { credentials },
 	});
 	if (!props.standalone) void aiGateway.saveAfterToggle();
-}
-
-// Leaves Gateway credits on this node: restores the user's latest credential, or clears the slot.
-function onUseOwnCredential({ nodeName }: { nodeName: string }): void {
-	if (nodeName !== props.node.name) return;
-	for (const [credentialType, credential] of Object.entries(props.node.credentials ?? {})) {
-		if (credential.__aiGatewayManaged) onAiGatewaySelector(credentialType, false);
-	}
 }
 
 function getIssues(credentialTypeName: string): string[] {

@@ -1086,10 +1086,6 @@ function showResourceDropdown() {
 	resourceDropdownVisible.value = true;
 }
 
-function onUseOwnCredential() {
-	if (props.node) ndvEventBus.emit('credential.useOwn', { nodeName: props.node.name });
-}
-
 function onListItemSelected(value: INodeParameterResourceLocator['value']) {
 	onInputChange(value);
 	hideResourceDropdown();
@@ -1349,11 +1345,7 @@ function removeOverride() {
 				</div>
 			</div>
 		</ResourceLocatorDropdown>
-		<PremiumModelNotice
-			v-if="showPremiumModelNotice"
-			can-use-own-credential
-			@use-own-credential="onUseOwnCredential"
-		/>
+		<PremiumModelNotice v-if="showPremiumModelNotice" />
 		<ParameterOverrideSelectableList
 			v-if="isContentOverride && fromAIOverride"
 			v-model="fromAIOverride"

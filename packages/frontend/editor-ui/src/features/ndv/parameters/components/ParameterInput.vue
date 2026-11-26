@@ -83,7 +83,6 @@ import {
 
 import { getDebounceTime, useDebounce } from '@n8n/composables/useDebounce';
 import { useAiGateway } from '@/app/composables/useAiGateway';
-import { ndvEventBus } from '@/features/ndv/shared/ndv.eventBus';
 import { useAiGatewayStore } from '@/app/stores/aiGateway.store';
 import { usePremiumModelsUpgrade } from '@/app/composables/usePremiumModelsUpgrade';
 import PremiumModelNotice from '@/features/ai/gateway/components/PremiumModelNotice.vue';
@@ -927,10 +926,6 @@ const isSelectedOptionLocked = computed(
 		typeof props.modelValue === 'string' &&
 		isOptionLocked({ name: props.modelValue, value: props.modelValue }),
 );
-
-function onUseOwnCredential() {
-	if (node.value) ndvEventBus.emit('credential.useOwn', { nodeName: node.value.name });
-}
 
 function isOptionDisabled(option: INodePropertyOptions) {
 	return 'disabled' in option && option.disabled === true;
@@ -2222,11 +2217,7 @@ onUpdated(async () => {
 					</div>
 				</N8nOption>
 			</N8nSelect>
-			<PremiumModelNotice
-				v-if="showPremiumModelNotice"
-				can-use-own-credential
-				@use-own-credential="onUseOwnCredential"
-			/>
+			<PremiumModelNotice v-if="showPremiumModelNotice" />
 
 			<N8nSelect
 				v-else-if="parameter.type === 'multiOptions'"
