@@ -97,26 +97,26 @@ const listLabel = computed(() =>
 }
 
 /*
- * The header and two whole rows, so the credential form below keeps its first fields on
- * screen. The third fades out at the bottom edge, the design system's hint that a list
- * scrolls on. The height counts the header, the whole rows and the fading one, each a
- * row high with a gap. The space under the last row keeps its text clear of the fade at
- * the end of the list. A shorter list takes only the height it needs.
+ * The header and three rows, so the credential form below keeps its first fields on
+ * screen. The first row is whole and the next two fade out towards the bottom edge, the
+ * design system's hint that a list scrolls on, over the same length as the picker's other
+ * lists. The height counts the header and two rows, each a row high with a gap, and the
+ * room the last row takes. The space under the last row keeps its text clear of the fade
+ * at the end of the list. A shorter list takes only the height it needs.
  */
-$whole-rows: 2;
+$fade: calc(var(--spacing--xl) * 3);
+$fade-clearance: calc(var(--spacing--xl) * 2.5);
 
 .scroller {
-	max-height: calc(
-		var(--spacing--xl) * #{$whole-rows + 2} + var(--spacing--2xs) * #{$whole-rows + 1}
-	);
+	max-height: calc(var(--spacing--xl) * 3 + var(--spacing--2xs) * 3 + var(--spacing--2xl));
 	/* Positioned, so the hidden labels of the rows scroll with the list and add no height to the page. */
 	position: relative;
-	padding-bottom: var(--spacing--sm);
+	padding-bottom: $fade-clearance;
 	overflow-y: auto;
 	outline: none;
 
 	@include scrollbar-mixins.scroll-bar;
-	@include scrollbar-mixins.scroll-mask(bottom, var(--spacing--lg));
+	@include scrollbar-mixins.scroll-mask(bottom, $fade);
 }
 
 .caption {

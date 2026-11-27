@@ -36,9 +36,16 @@ function model(overrides: Partial<ModelPickerModel> & { id: string }): ModelPick
 	};
 }
 
-/** The first page has a search too. The full list's own search is the second in the dialog. */
 function listSearch(dialog: HTMLElement) {
-	return within(dialog).getAllByPlaceholderText('Search all models…')[1];
+	return within(dialog).getByPlaceholderText('Search all models…');
+}
+
+/** The models the default scenario offers: the ones a connected provider serves. */
+function connectedModels() {
+	const providers = new Set(FAKE_MODEL_CONNECTIONS.flatMap((connection) => connection.providers));
+	return FAKE_MODEL_CATALOG.filter((entry) =>
+		entry.providers.some((provider) => providers.has(provider)),
+	);
 }
 
 describe('modelPicker.utils', () => {
@@ -148,7 +155,7 @@ describe('AgentModelPicker', () => {
 	});
 	const renderSwitch = createComponentRenderer(ModelPickerScenarioSwitch);
 
-	it('should select a suggested model and show its credential on the trigger', async () => {
+	it('should open on the full list and select a suggested model from it', async () => {
 		const user = userEvent.setup();
 		renderComponent();
 
@@ -158,11 +165,17 @@ describe('AgentModelPicker', () => {
 
 		await user.click(trigger);
 		const dialog = await screen.findByRole('dialog');
-		const suggested = within(dialog).getByRole('listbox', { name: 'Suggested models' });
-		expect(within(suggested).getAllByRole('option')).toHaveLength(3);
+		// The picker has one page of models: the whole list, with no step before it.
+		const all = within(dialog).getByRole('listbox', { name: 'All models' });
+		expect(within(dialog).queryByRole('button', { name: /back/i })).toBeNull();
+		// The three suggestions lead the list. A label marks each.
+		const labels = within(all)
+			.getAllByTestId('agent-model-picker-preset')
+			.map((label) => label.textContent?.trim());
+		expect(labels).toEqual(['Balanced', 'Cheaper', 'Long sessions']);
 
 		// Each suggestion is from a different lab. Cheaper is an open-weight model here.
-		await user.click(within(suggested).getByRole('option', { name: /Cheaper/ }));
+		await user.click(within(all).getByRole('option', { name: /Cheaper/ }));
 		expect(trigger).toHaveTextContent('Llama 5 405B');
 		await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
 
@@ -178,7 +191,7 @@ describe('AgentModelPicker', () => {
 		);
 		await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
 
-		// Both lists mark the selected model with the tick of the menus.
+		// The list marks the selected model with the tick of the menus.
 		await user.click(trigger);
 		const reopened = await screen.findByRole('dialog');
 		const selected = within(reopened).getByRole('option', { name: /Balanced/ });
@@ -186,11 +199,6 @@ describe('AgentModelPicker', () => {
 		expect(within(selected).getByTestId('agent-model-picker-selected')).toBeInTheDocument();
 		const cheaper = within(reopened).getByRole('option', { name: /Cheaper/ });
 		expect(within(cheaper).queryByTestId('agent-model-picker-selected')).toBeNull();
-
-		await user.click(within(reopened).getByTestId('agent-model-picker-show-all'));
-		const all = within(reopened).getByRole('listbox', { name: 'All models' });
-		const selectedInAll = within(all).getByRole('option', { name: /Claude Sonnet 5\.5/ });
-		expect(within(selectedInAll).getByTestId('agent-model-picker-selected')).toBeInTheDocument();
 	});
 
 	describe('prototype scenarios', () => {
@@ -214,7 +222,7 @@ describe('AgentModelPicker', () => {
 
 			await user.click(screen.getByTestId('agent-model-picker-trigger'));
 			const dialog = await screen.findByRole('dialog');
-			expect(within(dialog).queryByTestId('agent-model-picker-show-all')).toBeNull();
+			expect(within(dialog).queryByRole('listbox', { name: 'All models' })).toBeNull();
 
 			// With the model preview on, the provider list is the first page. Without it,
 			// an empty page comes first and its button opens the list.
@@ -230,12 +238,12 @@ describe('AgentModelPicker', () => {
 			);
 			await user.click(within(dialog).getByTestId('agent-model-picker-credential-save'));
 
-			// Back on the first page, with only the models Mistral serves.
-			const showAll = await within(dialog).findByTestId('agent-model-picker-show-all');
+			// On to the model list, with only the models Mistral serves.
+			const all = await within(dialog).findByRole('listbox', { name: 'All models' });
 			const mistralModels = FAKE_MODEL_CATALOG.filter((entry) =>
 				entry.providers.includes('mistral'),
 			);
-			expect(showAll).toHaveTextContent(`${mistralModels.length} models available`);
+			expect(within(all).getAllByRole('option')).toHaveLength(Math.min(100, mistralModels.length));
 			expect(within(dialog).getByTestId('agent-model-picker-providers')).toHaveTextContent(
 				'Providers · 1',
 			);
@@ -339,7 +347,7 @@ describe('AgentModelPicker', () => {
 			expect(
 				await within(emptyDialog).findByRole('listbox', { name: 'Choose a provider' }),
 			).toBeVisible();
-			expect(within(emptyDialog).queryByTestId('agent-model-picker-show-all')).toBeNull();
+			expect(within(emptyDialog).queryByRole('listbox', { name: 'All models' })).toBeNull();
 		});
 
 		it('should offer the current picker first, then the two new-picker scenarios', async () => {
@@ -363,14 +371,13 @@ describe('AgentModelPicker', () => {
 		});
 	});
 
-	it('should show a model picked from the full list on the first page', async () => {
+	it('should lead the list with the selected model when it is not a suggestion', async () => {
 		const user = userEvent.setup();
 		renderComponent();
 		const trigger = screen.getByTestId('agent-model-picker-trigger');
 
 		await user.click(trigger);
 		const dialog = await screen.findByRole('dialog');
-		await user.click(within(dialog).getByTestId('agent-model-picker-show-all'));
 		await user.type(listSearch(dialog), 'Gemini 4 Argon');
 		const all = within(dialog).getByRole('listbox', { name: 'All models' });
 		// The model comes first, before its dated snapshots.
@@ -379,12 +386,14 @@ describe('AgentModelPicker', () => {
 
 		await user.click(trigger);
 		const reopened = await screen.findByRole('dialog');
-		const suggested = within(reopened).getByRole('listbox', { name: 'Suggested models' });
-		const options = within(suggested).getAllByRole('option');
-		// The selected model leads the page, above the three suggestions.
-		expect(options).toHaveLength(4);
+		// Each opening shows the whole list again, not the last search.
+		expect(listSearch(reopened)).toHaveValue('');
+		const options = within(
+			within(reopened).getByRole('listbox', { name: 'All models' }),
+		).getAllByRole('option');
+		// The selected model leads the list, above the three suggestions.
 		expect(options[0]).toHaveTextContent('Gemini 4 Argon');
-		// The tick marks it. Only the suggestions carry a badge.
+		// The tick marks it. Only the suggestions carry a label.
 		expect(within(options[0]).getByTestId('agent-model-picker-selected')).toBeInTheDocument();
 		expect(within(options[0]).queryByTestId('agent-model-picker-preset')).toBeNull();
 		expect(within(options[1]).getByTestId('agent-model-picker-preset')).toHaveTextContent(
@@ -392,26 +401,26 @@ describe('AgentModelPicker', () => {
 		);
 	});
 
-	it('should sort the suggested models by a column', async () => {
+	it('should sort the list by a column', async () => {
 		const user = userEvent.setup();
 		renderComponent();
 
 		await user.click(screen.getByTestId('agent-model-picker-trigger'));
 		const dialog = await screen.findByRole('dialog');
-		const suggested = within(dialog).getByRole('listbox', { name: 'Suggested models' });
-		const names = () =>
-			within(suggested)
-				.getAllByRole('option')
-				.map((option) => option.textContent);
-		const [sortInput] = within(dialog).getAllByTestId('agent-model-picker-sort-input');
+		const all = within(dialog).getByRole('listbox', { name: 'All models' });
+		const first = () => within(all).getAllByRole('option')[0];
+		const sortInput = within(dialog).getByTestId('agent-model-picker-sort-input');
+		const prices = connectedModels().flatMap((entry) =>
+			entry.cost?.input === undefined ? [] : [entry.cost.input],
+		);
 
-		// High to low, then low to high, then the order of the suggestions again.
+		// High to low, then low to high, then the suggestions first again.
 		await user.click(sortInput);
-		expect(names()[0]).toContain('Claude Sonnet 5.5');
+		expect(first()).toHaveTextContent(formatCost(Math.max(...prices)));
 		await user.click(sortInput);
-		expect(names()[0]).toContain('Llama 5 405B');
+		expect(first()).toHaveTextContent(formatCost(Math.min(...prices)));
 		await user.click(sortInput);
-		expect(names()[0]).toContain('Balanced');
+		expect(first()).toHaveTextContent('Balanced');
 	});
 
 	it('should list all models and filter them by search text', async () => {
@@ -420,7 +429,6 @@ describe('AgentModelPicker', () => {
 
 		await user.click(screen.getByTestId('agent-model-picker-trigger'));
 		const dialog = await screen.findByRole('dialog');
-		await user.click(within(dialog).getByTestId('agent-model-picker-show-all'));
 
 		const all = within(dialog).getByRole('listbox', { name: 'All models' });
 		const options = within(all).getAllByRole('option');
@@ -458,14 +466,29 @@ describe('AgentModelPicker', () => {
 		const dialog = await screen.findByRole('dialog');
 		const providers = within(dialog).getByTestId('agent-model-picker-providers');
 		expect(providers).toHaveTextContent('Providers · 3');
-		const showAll = within(dialog).getByTestId('agent-model-picker-show-all');
-		const before = showAll.textContent;
+
+		// A model that only the Gateway credits serve is in the list.
+		const gateway = FAKE_MODEL_CONNECTIONS.filter((connection) => connection.kind === 'gateway');
+		const credentials = FAKE_MODEL_CONNECTIONS.filter(
+			(connection) => connection.kind === 'credential',
+		);
+		const serves = (connections: typeof FAKE_MODEL_CONNECTIONS, entry: ModelPickerModel) =>
+			connections.some((connection) =>
+				connection.providers.some((provider) => entry.providers.includes(provider)),
+			);
+		const gatewayOnly = FAKE_MODEL_CATALOG.find(
+			(entry) => serves(gateway, entry) && !serves(credentials, entry),
+		);
+		if (!gatewayOnly) throw new Error('The fake catalog has no model that only the gateway serves');
+		await user.type(listSearch(dialog), gatewayOnly.id);
+		expect(within(dialog).getAllByRole('option').length).toBeGreaterThan(0);
 
 		await user.click(providers);
 		await user.click(await screen.findByRole('menuitemcheckbox', { name: /Gateway credits/ }));
 
 		expect(providers).toHaveTextContent('Providers · 2');
-		expect(showAll.textContent).not.toBe(before);
+		// With the Gateway credits off, the search finds nothing.
+		expect(within(dialog).getByTestId('agent-model-picker-no-match')).toBeInTheDocument();
 
 		// A provider row opens its credentials. Its checkbox turns the provider off.
 		const anthropic = screen.getByRole('menuitem', { name: /Anthropic/ });
@@ -569,6 +592,6 @@ describe('AgentModelPicker', () => {
 		await user.click(within(dialog).getByRole('button', { name: /back/i }));
 		expect(within(dialog).getByRole('listbox', { name: 'Choose a provider' })).toBeVisible();
 		await user.click(within(dialog).getByRole('button', { name: /back/i }));
-		expect(within(dialog).getByTestId('agent-model-picker-show-all')).toBeVisible();
+		expect(within(dialog).getByRole('listbox', { name: 'All models' })).toBeVisible();
 	});
 });

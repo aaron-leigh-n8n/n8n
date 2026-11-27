@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import {
+	N8nBadge,
 	N8nIcon,
 	N8nListbox,
 	N8nListboxItem,
@@ -9,7 +10,7 @@ import {
 } from '@n8n/design-system';
 import { useI18n } from '@n8n/i18n';
 import { useIntersectionObserver } from '@vueuse/core';
-import { computed, ref, useTemplateRef, watch } from 'vue';
+import { computed, nextTick, ref, useTemplateRef, watch } from 'vue';
 
 import { getProviderCredentialTypes, isAgentModelProvider } from '../../model-providers';
 import ModelSelectorTriggerIcon from '../model-selector/ModelSelectorTriggerIcon.vue';
@@ -24,7 +25,7 @@ import {
 
 export interface ModelPickerRow {
 	model: ModelPickerModel;
-	/** Name of the preset that suggests this model. Shown as plain text beside the model's name. */
+	/** Name of the preset that suggests this model. Shown as a badge beside the model's name. */
 	presetLabel?: string;
 }
 
@@ -113,9 +114,25 @@ const sortedRows = computed(() => {
 
 /** How many rows are drawn. A long catalog draws a page at a time, like the earlier prototype. */
 const limit = ref(props.pageSize ?? Infinity);
-watch([() => props.rows, sort], () => {
+const list = useTemplateRef<HTMLElement>('list');
+
+/**
+ * New rows, or a new order, start again at the first row: one page of rows, at the top
+ * of whatever scrolls the list. The scroll waits for the page to finish updating. A list
+ * that was hidden while its rows changed, as when a provider is connected, cannot scroll
+ * until it shows, and `v-show` only shows it at the end of the update.
+ */
+watch([() => props.rows, sort], async () => {
 	limit.value = props.pageSize ?? Infinity;
+	await nextTick();
+	for (let parent = list.value?.parentElement; parent; parent = parent.parentElement) {
+		if (/auto|scroll/.test(getComputedStyle(parent).overflowY)) {
+			parent.scrollTop = 0;
+			return;
+		}
+	}
 });
+
 const hasMore = computed(() => sortedRows.value.length > limit.value);
 
 /** Reaching the end of the drawn rows draws the next page. There is nothing to click. */
@@ -144,7 +161,11 @@ function onSelect(modelId: string | undefined) {
 </script>
 
 <template>
-	<div :class="$style.list" :style="{ '--model-picker--feature-count': FEATURES.length }">
+	<div
+		ref="list"
+		:class="$style.list"
+		:style="{ '--model-picker--feature-count': FEATURES.length }"
+	>
 		<div :class="[$style.grid, $style.header]">
 			<N8nText size="xsmall" color="text-light">
 				{{ props.modelLabel ?? i18n.baseText('agents.modelPicker.column.model') }}
@@ -203,16 +224,14 @@ function onSelect(modelId: string | undefined) {
 								{{ row.model.name }}
 							</N8nText>
 						</span>
-						<!-- Why the model is suggested, in both lists: plain text beside the name, in the grey of the column titles. -->
-						<N8nText
+						<!-- Why the model is suggested: the design system's default badge beside the name, like the balance in the Providers menu. -->
+						<N8nBadge
 							v-if="row.presetLabel"
-							size="small"
-							color="text-light"
 							:class="$style.preset"
 							data-testid="agent-model-picker-preset"
 						>
 							{{ row.presetLabel }}
-						</N8nText>
+						</N8nBadge>
 						<!--
 							The option owns the selected state. This tick, like the one in the menus, only
 							shows it. It follows the name, so the features and the bars can run to the

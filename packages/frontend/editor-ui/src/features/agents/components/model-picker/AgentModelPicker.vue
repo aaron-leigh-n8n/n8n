@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /**
- * Model picker for the agent builder: a trigger row that opens a dialog with
- * suggested models and the full, filterable model list.
+ * Model picker for the agent builder: a trigger row that opens a dialog with the
+ * full, filterable model list. The suggested models come first, each with a label.
  */
 import {
 	N8nButton,
@@ -104,7 +104,7 @@ const searchInput = useTemplateRef('searchInput');
 const credentialForm = useTemplateRef('credentialForm');
 
 const open = ref(false);
-const step = ref<'select' | 'list' | 'credential'>('select');
+const step = ref<'list' | 'credential'>('list');
 
 const { scenario, skipKeyCheck, previewModels } = useModelPickerScenario();
 const startConnections = computed(
@@ -145,27 +145,22 @@ const presetRows = computed(() =>
 );
 
 /**
- * The first page: the selected model first when it is not a suggestion, so the
- * active model is always in view, then the suggestions.
+ * The filtered list. The selected model leads it when it is not a suggestion, so the
+ * active model is in view when the picker opens. Its tick says what it is, so it needs
+ * no label. Then come the suggested models, in the order of the suggestions.
  */
-const suggestionRows = computed(() => {
-	const model = selectedModel.value;
-	if (!model || presetRows.value.some((row) => row.model.id === model.id)) {
-		return presetRows.value;
-	}
-	// Its tick says it is the selected model, so it needs no label.
-	return [{ model, presetLabel: undefined }, ...presetRows.value];
-});
-
-/** The filtered list, with the suggested models first, in the order of the suggestions. */
 const allRows = computed(() => {
 	const presetIds = presetRows.value.map((row) => row.model.id);
+	const selectedId = selection.value?.modelId;
 	return sortBy(
 		filterModels(availableModels.value, filters).map((model) => ({
 			model,
 			presetLabel: presetRows.value[presetIds.indexOf(model.id)]?.presetLabel,
 		})),
-		({ model }) => (presetIds.includes(model.id) ? presetIds.indexOf(model.id) : presetIds.length),
+		({ model }) => {
+			if (presetIds.includes(model.id)) return presetIds.indexOf(model.id);
+			return model.id === selectedId ? -1 : presetIds.length;
+		},
 	);
 });
 
@@ -236,31 +231,15 @@ function openPicker() {
 	// Preview experiment: with nothing connected, the provider list is the first page.
 	// It shows what each provider offers, so the empty page before it has nothing to add.
 	if (previewModels.value && allConnections.value.length === 0) {
-		startCredential([], 'select', true);
+		startCredential([], 'list', true);
 		return;
 	}
 	credentialFlow.value = null;
-	step.value = 'select';
+	// Each opening shows the whole list again. The filters stay as the person set them.
+	filters.search = '';
+	step.value = 'list';
 	open.value = true;
 }
-
-async function showAllModels() {
-	step.value = 'list';
-	await nextTick();
-	searchInput.value?.focus();
-}
-
-/**
- * The first page has a search too. Typing in it opens the full list with the
- * query, and the list's own search takes over, so the person can keep typing.
- */
-const quickSearch = ref('');
-watch(quickSearch, (query) => {
-	if (!query) return;
-	filters.search = query;
-	quickSearch.value = '';
-	void showAllModels();
-});
 
 function selectModel(modelId: string) {
 	const model = props.models.find((candidate) => candidate.id === modelId);
@@ -304,20 +283,12 @@ function toggleFeature(id: string) {
 const credentialFlow = ref<{
 	providers: AgentModelProvider[];
 	provider?: AgentModelProvider;
-	returnStep: 'select' | 'list' | null;
+	returnStep: 'list' | null;
 	/** Preview experiment: the provider list is the picker's first page, so it has no Back. */
 	root?: boolean;
 } | null>(null);
 
 const credentialProvider = computed(() => credentialFlow.value?.provider);
-
-/**
- * The model step on show, or the one the credential step goes back to. The toolbar keeps
- * that step's controls while the credential step hides it.
- */
-const modelStep = computed(() =>
-	step.value === 'credential' ? (credentialFlow.value?.returnStep ?? 'select') : step.value,
-);
 
 /**
  * Narrows the provider choice by the provider's name only. A model's name finds nothing
@@ -334,6 +305,16 @@ const providerChoices = computed(() => {
 		AGENT_MODEL_PROVIDER_DEFINITIONS[provider].displayName.toLowerCase().includes(query),
 	);
 });
+/**
+ * New matches start at the first one: the provider list goes back to its top, like the
+ * model list. Without it, a search typed into a scrolled list would hide its top matches.
+ */
+const providerScroll = useTemplateRef<HTMLElement>('providerScroll');
+watch(providerChoices, async () => {
+	await nextTick();
+	if (providerScroll.value) providerScroll.value.scrollTop = 0;
+});
+
 /** Preview experiment: one line under each provider's name. */
 const providerPreviewLines = computed(
 	() =>
@@ -360,7 +341,7 @@ function chooseFirstProvider() {
 
 function startCredential(
 	providers: readonly AgentModelProvider[],
-	returnStep: 'select' | 'list' | null,
+	returnStep: 'list' | null,
 	root = false,
 ) {
 	const choices = providers.length > 0 ? [...providers] : [...AGENT_MODEL_PROVIDERS];
@@ -375,10 +356,10 @@ function startCredential(
 	if (!credentialFlow.value.provider) void focusProviderSearch();
 }
 
-/** Starts from the Providers menu, which can open on either step. */
+/** Starts from the Providers menu or from the hint under the list. */
 function onProvidersCreate(provider?: AgentModelProvider) {
 	if (step.value === 'credential') return;
-	startCredential(provider ? [provider] : [], step.value);
+	startCredential(provider ? [provider] : [], 'list');
 }
 
 function chooseCredentialProvider(provider: string | undefined) {
@@ -387,7 +368,6 @@ function chooseCredentialProvider(provider: string | undefined) {
 }
 
 const canGoBack = computed(() => {
-	if (step.value === 'list') return true;
 	const flow = credentialFlow.value;
 	if (step.value !== 'credential' || !flow) return false;
 	if (flow.root && !flow.provider) return false;
@@ -396,16 +376,13 @@ const canGoBack = computed(() => {
 
 function goBack() {
 	const flow = credentialFlow.value;
-	if (step.value !== 'credential' || !flow) {
-		step.value = 'select';
-		return;
-	}
+	if (step.value !== 'credential' || !flow) return;
 	if (flow.provider && flow.providers.length > 1) {
 		flow.provider = undefined;
 		void focusProviderSearch();
 		return;
 	}
-	step.value = flow.returnStep ?? 'select';
+	step.value = 'list';
 	credentialFlow.value = null;
 }
 
@@ -462,7 +439,7 @@ function onCredentialCreated(credential: ICredentialsResponse) {
 /** A new scenario starts the walkthrough again: nothing created, nothing selected. */
 watch(startConnections, (list) => {
 	open.value = false;
-	step.value = 'select';
+	step.value = 'list';
 	credentialFlow.value = null;
 	createdConnections.value = [];
 	enabledConnectionIds.value = defaultEnabledIds(list);
@@ -622,7 +599,7 @@ defineExpose({ open: openPicker });
 						<template #prefix><N8nIcon icon="search" /></template>
 					</N8nInput>
 					<!-- The list scrolls under the search, like the model list. -->
-					<div v-if="providerChoices.length > 0" :class="$style.scroll">
+					<div v-if="providerChoices.length > 0" ref="providerScroll" :class="$style.scroll">
 						<N8nListbox
 							:label="i18n.baseText('agents.modelPicker.credential.chooseProvider')"
 							@update:model-value="chooseCredentialProvider"
@@ -663,86 +640,71 @@ defineExpose({ open: openPicker });
 			</div>
 
 			<!--
-				The two model steps share the dialog's step frame, with the hint below them.
-				Hidden, not removed, on the credential step, so Back finds them as they were.
+				The model list shares the dialog's step frame with the hint below it.
+				Hidden, not removed, on the credential step, so Back finds it as it was.
 			-->
 			<div v-show="step !== 'credential'" :class="$style.modelSteps">
 				<!--
-					One row for the search and every filter, shared by both model steps, so
-					Providers keeps its place from one step to the other. Each step shows its own
-					search, and the filters of the full list show on that step only. The row is
-					hidden, not removed, on the credential step: the dialog's focus trap remembers
-					the Providers button while its menu is open, and if the button left the page
-					the trap would pull focus out of the provider search. With nothing connected
-					there is nothing to search or filter, so the row is left out.
+					One row for the search and every filter. The row is hidden, not removed, on
+					the credential step: the dialog's focus trap remembers the Providers button
+					while its menu is open, and if the button left the page the trap would pull
+					focus out of the provider search. With nothing connected there is nothing to
+					search or filter, so the row is left out.
 				-->
 				<div v-if="allConnections.length > 0" :class="$style.toolbar">
 					<N8nInput
-						v-show="modelStep === 'select'"
-						v-model="quickSearch"
-						:class="$style.search"
-						:placeholder="i18n.baseText('agents.modelPicker.search.placeholder')"
-						:disabled="availableModels.length === 0"
-						data-agent-modal-autofocus
-						data-testid="agent-model-picker-quick-search"
-					>
-						<template #prefix><N8nIcon icon="search" /></template>
-					</N8nInput>
-					<N8nInput
-						v-show="modelStep === 'list'"
 						ref="searchInput"
 						v-model="filters.search"
 						:class="$style.search"
 						:placeholder="i18n.baseText('agents.modelPicker.search.placeholder')"
 						clearable
+						data-agent-modal-autofocus
 						data-testid="agent-model-picker-search"
 					>
 						<template #prefix><N8nIcon icon="search" /></template>
 					</N8nInput>
-					<template v-if="modelStep === 'list'">
-						<N8nDropdownMenu :items="featureItems" placement="bottom-end" @select="toggleFeature">
-							<template #trigger>
-								<N8nButton variant="outline" data-testid="agent-model-picker-features">
-									{{
-										filters.features.length > 0
-											? i18n.baseText('agents.modelPicker.filter.featuresCount', {
-													interpolate: { count: String(filters.features.length) },
-												})
-											: i18n.baseText('agents.modelPicker.filter.features')
-									}}
-									<N8nIcon icon="chevron-down" size="small" />
-								</N8nButton>
-							</template>
-							<template #item-leading="{ item, ui }">
-								<!-- The menu item owns the checked state. This box only shows it. -->
-								<N8nCheckbox
-									:model-value="item.checked"
-									:class="[ui.class, $style.passive]"
-									tabindex="-1"
-									aria-hidden="true"
-								/>
-							</template>
-						</N8nDropdownMenu>
+					<N8nDropdownMenu :items="featureItems" placement="bottom-end" @select="toggleFeature">
+						<template #trigger>
+							<N8nButton variant="outline" data-testid="agent-model-picker-features">
+								{{
+									filters.features.length > 0
+										? i18n.baseText('agents.modelPicker.filter.featuresCount', {
+												interpolate: { count: String(filters.features.length) },
+											})
+										: i18n.baseText('agents.modelPicker.filter.features')
+								}}
+								<N8nIcon icon="chevron-down" size="small" />
+							</N8nButton>
+						</template>
+						<template #item-leading="{ item, ui }">
+							<!-- The menu item owns the checked state. This box only shows it. -->
+							<N8nCheckbox
+								:model-value="item.checked"
+								:class="[ui.class, $style.passive]"
+								tabindex="-1"
+								aria-hidden="true"
+							/>
+						</template>
+					</N8nDropdownMenu>
 
-						<N8nDropdownMenu
-							:items="costItems"
-							placement="bottom-end"
-							@select="filters.cost = $event"
-						>
-							<template #trigger>
-								<N8nButton variant="outline" data-testid="agent-model-picker-cost">
-									{{
-										i18n.baseText(
-											filters.cost === 'any'
-												? 'agents.modelPicker.filter.cost'
-												: COST_LABELS[filters.cost],
-										)
-									}}
-									<N8nIcon icon="chevron-down" size="small" />
-								</N8nButton>
-							</template>
-						</N8nDropdownMenu>
-					</template>
+					<N8nDropdownMenu
+						:items="costItems"
+						placement="bottom-end"
+						@select="filters.cost = $event"
+					>
+						<template #trigger>
+							<N8nButton variant="outline" data-testid="agent-model-picker-cost">
+								{{
+									i18n.baseText(
+										filters.cost === 'any'
+											? 'agents.modelPicker.filter.cost'
+											: COST_LABELS[filters.cost],
+									)
+								}}
+								<N8nIcon icon="chevron-down" size="small" />
+							</N8nButton>
+						</template>
+					</N8nDropdownMenu>
 					<ModelPickerProviders
 						v-model="enabledConnectionIds"
 						:connections="allConnections"
@@ -750,11 +712,7 @@ defineExpose({ open: openPicker });
 					/>
 				</div>
 
-				<!-- Both steps stay mounted, so Back keeps the search, the filters, and the scroll position. -->
-				<div
-					v-show="step === 'select'"
-					:class="[$style.step, { [$style.fill]: allConnections.length > 0 }]"
-				>
+				<div :class="[$style.step, $style.listStep]">
 					<N8nEmptyState
 						v-if="allConnections.length === 0"
 						:icon="{ type: 'icon', value: 'key-round' }"
@@ -764,45 +722,9 @@ defineExpose({ open: openPicker });
 						button-icon="plus"
 						:class="$style.emptyState"
 						data-testid="agent-model-picker-empty"
-						@click:button="startCredential([], 'select')"
+						@click:button="startCredential([], 'list')"
 					/>
-					<ModelPickerList
-						v-else-if="suggestionRows.length > 0"
-						:rows="suggestionRows"
-						:label="i18n.baseText('agents.modelPicker.suggested')"
-						:selected-model-id="selection?.modelId"
-						:maxima="maxima"
-						@select="selectModel"
-					/>
-					<N8nEmptyState
-						v-else
-						:icon="{ type: 'icon', value: 'key-round' }"
-						:heading="i18n.baseText('agents.modelPicker.noProviders.heading')"
-						:description="i18n.baseText('agents.modelPicker.noProviders.description')"
-						:class="$style.emptyState"
-						data-testid="agent-model-picker-no-providers"
-					/>
-					<div v-if="allConnections.length > 0" :class="$style.allModelsRow">
-						<N8nButton
-							variant="ghost"
-							:class="$style.allModels"
-							:disabled="availableModels.length === 0"
-							data-testid="agent-model-picker-show-all"
-							@click="showAllModels"
-						>
-							{{
-								i18n.baseText('agents.modelPicker.allModels', {
-									adjustToNumber: availableModels.length,
-									interpolate: { count: String(availableModels.length) },
-								})
-							}}
-							<N8nIcon icon="arrow-right" size="small" />
-						</N8nButton>
-					</div>
-				</div>
-
-				<div v-show="step === 'list'" :class="[$style.step, $style.listStep]">
-					<div :class="$style.scroll">
+					<div v-else :class="$style.scroll">
 						<ModelPickerList
 							v-if="allRows.length > 0"
 							:rows="allRows"
@@ -829,11 +751,12 @@ defineExpose({ open: openPicker });
 							:heading="i18n.baseText('agents.modelPicker.noProviders.heading')"
 							:description="i18n.baseText('agents.modelPicker.noProviders.description')"
 							:class="$style.emptyState"
+							data-testid="agent-model-picker-no-providers"
 						/>
 					</div>
 				</div>
 
-				<!-- Always in view on both steps: more models come from connecting another provider. -->
+				<!-- Always in view under the list: more models come from connecting another provider. -->
 				<N8nText
 					v-if="allConnections.length > 0"
 					tag="p"
@@ -870,6 +793,20 @@ defineExpose({ open: openPicker });
 @use '@n8n/design-system/css/mixins/focus';
 @use '@n8n/design-system/css/mixins/mixins' as scrollbar-mixins;
 
+/*
+ * Every list of the picker that scrolls fades out at its bottom edge, the design system's
+ * hint that it goes on. The mixin takes the length of the fade: here it is three rows
+ * long, far longer than its default, so the list is seen thinning out well before its
+ * edge. The space under the last row keeps its text clear of the fade at the end of the
+ * list.
+ */
+$list-fade: calc(var(--spacing--xl) * 3);
+$list-fade-clearance: calc(var(--spacing--xl) * 2.5);
+
+/* The credential form is a page, not a list. A shorter fade leaves the last field in view readable. */
+$form-fade: var(--spacing--2xl);
+$form-fade-clearance: var(--spacing--xl);
+
 .providerChoice {
 	display: flex;
 	flex-direction: column;
@@ -901,11 +838,11 @@ defineExpose({ open: openPicker });
 			2 - var(--height--md) - var(--border-width)
 	);
 	margin-inline: calc(-1 * var(--spacing--4xs));
-	padding: 0 var(--spacing--4xs) var(--spacing--sm);
+	padding: 0 var(--spacing--4xs) $form-fade-clearance;
 	overflow-y: auto;
 
 	@include scrollbar-mixins.scroll-bar;
-	@include scrollbar-mixins.scroll-mask(bottom, var(--spacing--lg));
+	@include scrollbar-mixins.scroll-mask(bottom, $form-fade);
 
 	/* A scrolling column must not squeeze the form to fit. */
 	> * {
@@ -1033,8 +970,7 @@ defineExpose({ open: openPicker });
 	height: min(60dvh, calc(var(--height--5xl) * 5));
 }
 
-/* A model step takes the room above the hint. */
-.fill,
+/* The model list takes the room above the hint. */
 .listStep {
 	flex: 1;
 	min-height: 0;
@@ -1062,33 +998,11 @@ defineExpose({ open: openPicker });
 	}
 }
 
-/* The empty state fills the first page, centred like the other empty pages. */
+/* An empty state fills the page, centred like the other empty pages. */
 .emptyState {
 	flex: 1;
 	justify-content: center;
 	padding: var(--spacing--xl) 0;
-}
-
-/* A subtle divider sets the full list apart from the suggestions. The step gap is the space above it. */
-.allModelsRow {
-	padding-top: var(--spacing--2xs);
-	border-top: var(--border-width) var(--border-style) var(--border-color--subtle);
-}
-
-/*
- * The way into the full list is as quiet as the column titles above it, and comes up to
- * the full text colour on hover and on focus, as the titles that sort do.
- */
-.allModels {
-	--button--color: var(--text-color--subtler);
-
-	justify-content: space-between;
-	width: 100%;
-
-	&:hover:not(:disabled),
-	&:focus-visible {
-		--button--color: var(--text-color);
-	}
 }
 
 .toolbar {
@@ -1103,25 +1017,17 @@ defineExpose({ open: openPicker });
 	min-width: var(--spacing--4xl);
 }
 
+/* A list that scrolls in the room it is given, with the fade at its bottom edge. */
 .scroll {
 	flex: 1;
 	min-height: 0;
-}
-
-/*
- * Every list of the picker that scrolls fades out at its bottom edge, the design system's
- * hint that it goes on. The space under the last row keeps its text clear of the fade at
- * the end of the list.
- */
-.fill,
-.scroll {
 	/* Positioned, so the hidden labels of the rows scroll with the list and add no height to the page. */
 	position: relative;
-	padding-bottom: var(--spacing--sm);
+	padding-bottom: $list-fade-clearance;
 	overflow-y: auto;
 
 	@include scrollbar-mixins.scroll-bar;
-	@include scrollbar-mixins.scroll-mask(bottom, var(--spacing--lg));
+	@include scrollbar-mixins.scroll-mask(bottom, $list-fade);
 }
 
 .passive {
